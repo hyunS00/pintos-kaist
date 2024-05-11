@@ -28,6 +28,8 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -108,6 +110,8 @@ thread_init (void) {
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+	//추가추가
+	list_init(&sleep_list);
 	list_init (&destruction_req);
 
 	/* Set up a thread structure for the running thread. */
@@ -587,4 +591,33 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+}
+
+
+//추가추가
+void thread_sleep(int64_t how_long_sleep)
+{
+	enum intr_level old_level;
+
+	old_level = intr_disable();
+	list_insert_ordered(&sleep_list, &thread_current()->elem,
+						tick_less, NULL);
+	thread_block();
+	intr_set_level(old_level);
+}
+
+static bool
+tick_less (const struct list_elem *a_, const struct list_elem *b_,
+            void *aux UNUSED) 
+{
+  const struct thread *a = list_entry (a_, struct thread, elem);
+  const struct thread *b = list_entry (b_, struct thread, elem);
+  
+  return a->awake_tic < b->awake_tic;
+}
+
+void awake()
+{
+	struct thread *t = list_entry(list_pop_front(&sleep_list), struct thread, elem);
+	thread_unblock(t);
 }
