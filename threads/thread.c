@@ -252,7 +252,7 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	list_insert_ordered(&ready_list, &t->elem, priority_more, NULL); // 우선순위대로 쓰레드 레디 리스트에 삽입
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -315,7 +315,7 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+		list_insert_ordered(&ready_list, &curr->elem, priority_more, NULL);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -620,11 +620,15 @@ void thread_sleep(int64_t end_tick){
 	ASSERT(cur != idle_thread);
 
 	old_level = intr_disable();
-	cur->wakeup_tick = end_tick;
-	lock_acquire(&sleep_lock);
-	list_insert_ordered(&sleep_list, &cur->elem, tick_less, NULL);
-	lock_release(&sleep_lock);
-	thread_block();
+	cur->wakeup_tick = end_tick; // 쓰레드에 종료틱 설정
+
+	lock_acquire(&sleep_lock); // 슬립리스트는 공유 변수이니까 락 설정
+
+	list_insert_ordered(&sleep_list, &cur->elem, tick_less, NULL); // 슬립리스트에 종료틱 오름차순으로 삽입
+	lock_release(&sleep_lock); // 슬립락 해제
+
+	thread_block(); // 현재 쓰레드 블록
+
 	intr_set_level(old_level);
 }
 
@@ -634,18 +638,19 @@ void thread_check_sleep_list(){
 	old_level = intr_disable();
 	int64_t ticks = timer_ticks();
 	// lock_acquire(&sleep_lock);
-    while (!list_empty(&sleep_list)) {
-        t = list_entry(list_front(&sleep_list), struct thread, elem);
-        if (t->wakeup_tick > ticks) {
+    while (!list_empty(&sleep_list)) { // 슬립 리스트에서 꺠울 쓰레드 탐색
+        t = list_entry(list_front(&sleep_list), struct thread, elem); // 슬립 리스트 맨 앞 쓰레드 조회
+        if (t->wakeup_tick > ticks) { // 쓰레드가 현재 글로벌 틱보다 크다면 탐색 종료
             break;
         }
-        list_pop_front(&sleep_list);
-        thread_unblock(t);
+        list_pop_front(&sleep_list); // 쓰레드가 현재 글로벌 틱보다 작거나 같다면 슬립 리스트에서 제거
+        thread_unblock(t); // 해당 쓰레드 언블록
     }
 	// lock_release(&sleep_lock);
 	intr_set_level(old_level);
 }
 
+/* 쓰레드 wakeup_tick 오름차순 정렬 함수*/
 bool
 tick_less (const struct list_elem *a_, const struct list_elem *b_,
             void *aux UNUSED) 
@@ -654,4 +659,14 @@ tick_less (const struct list_elem *a_, const struct list_elem *b_,
   const struct thread *b = list_entry (b_, struct thread, elem);
   
   return a->wakeup_tick < b->wakeup_tick;
+}
+
+bool
+priority_more (const struct list_elem *a_, const struct list_elem *b_,
+            void *aux UNUSED) 
+{
+  const struct thread *a = list_entry (a_, struct thread, elem);
+  const struct thread *b = list_entry (b_, struct thread, elem);
+  
+  return a->priority < b->priority;
 }

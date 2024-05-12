@@ -150,4 +150,7 @@ void do_iret (struct intr_frame *tf);
 void thread_sleep(int64_t end_tick);
 void thread_check_sleep_list();
 
+/* 우선순위 내림차순 정렬*/
+bool priority_more (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
+
 #endif /* threads/thread.h */
