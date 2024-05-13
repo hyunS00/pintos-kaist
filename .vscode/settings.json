@@ -1,0 +1,13 @@
+{
+  "files.associations": {
+    "unistd.h": "c",
+    "cdefs.h": "c",
+    "availability.h": "c",
+    "_common.h": "c",
+    "types.h": "c",
+    "stat.h": "c",
+    "fcntl.h": "c",
+    "wait.h": "c",
+    "csapp.h": "c"
+  }
+}
