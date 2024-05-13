@@ -94,7 +94,6 @@ struct thread {
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
-	int64_t awake_tic;
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -107,7 +106,7 @@ struct thread {
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
-	int64_t wakeup_tick;
+	int64_t wakeup_tick; // 슬립 쓰레드 시간되면 깨우는 틱
 };
 
 /* If false (default), use round-robin scheduler.

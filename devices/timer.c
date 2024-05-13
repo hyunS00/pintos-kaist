@@ -139,7 +139,7 @@ void
 timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
 /* 타이머 인터럽트 핸들러. */
 static void
@@ -147,7 +147,6 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
 	thread_check_sleep_list();
-
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

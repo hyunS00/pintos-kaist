@@ -662,7 +662,7 @@ tick_less (const struct list_elem *a_, const struct list_elem *b_,
   const struct thread *a = list_entry (a_, struct thread, elem);
   const struct thread *b = list_entry (b_, struct thread, elem);
   
-  return a->awake_tic < b->awake_tic;
+  return a->wakeup_tick < b->wakeup_tick;
 }
 
 bool
