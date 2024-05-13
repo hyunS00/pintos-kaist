@@ -265,19 +265,16 @@ thread_unblock (struct thread *t) {
 
 void
 preemption (void) {
-	enum intr_level oldlevel;
 	struct list_elem *e;
 	struct thread *t;
 
-	oldlevel = intr_disable();
 	if(list_empty(&ready_list) || thread_current() == idle_thread)
 		return;
-
 	e = list_begin(&ready_list);
 	t = list_entry(e, struct thread, elem);
+
 	if(t->priority > thread_current()->priority)
 		thread_yield();
-	intr_set_level(oldlevel);
 }
 
 /* Returns the name of the running thread. */
