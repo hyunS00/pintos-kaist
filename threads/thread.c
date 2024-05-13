@@ -70,7 +70,7 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
-
+static void preemption (void);
 static bool tick_less (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
 
 /* Returns true if T appears to point to a valid thread. */
@@ -258,7 +258,26 @@ thread_unblock (struct thread *t) {
 	ASSERT (t->status == THREAD_BLOCKED);
 	list_insert_ordered(&ready_list, &t->elem, priority_more, NULL); // 우선순위대로 쓰레드 레디 리스트에 삽입
 	t->status = THREAD_READY;
+
+	preemption();
 	intr_set_level (old_level);
+}
+
+void
+preemption (void) {
+	enum intr_level oldlevel;
+	struct list_elem *e;
+	struct thread *t;
+
+	oldlevel = intr_disable();
+	if(list_empty(&ready_list) || thread_current() == idle_thread)
+		return;
+
+	e = list_begin(&ready_list);
+	t = list_entry(e, struct thread, elem);
+	if(t->priority > thread_current()->priority)
+		thread_yield();
+	intr_set_level(oldlevel);
 }
 
 /* Returns the name of the running thread. */
@@ -328,6 +347,8 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	
+	preemption();
 }
 
 /* Returns the current thread's priority. */
