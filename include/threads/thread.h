@@ -107,6 +107,7 @@ struct thread {
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
+	int64_t wakeup_tick;
 };
 
 /* If false (default), use round-robin scheduler.
@@ -141,15 +142,15 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+void thread_set_wakeup_tick (int64_t tick);
+int64_t thread_get_wakeup_tick (void);
+
 void do_iret (struct intr_frame *tf);
 
-//추가추가
-void thread_sleep(int64_t how_long_sleep);
-static bool
-tick_less (const struct list_elem *a_, const struct list_elem *b_,
-            void *aux UNUSED) ;
-void awake();
-//추가추가
-static struct list sleep_list;
-//
+void thread_sleep(int64_t end_tick);
+void thread_check_sleep_list();
+
+/* 우선순위 내림차순 정렬*/
+bool priority_more (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
+
 #endif /* threads/thread.h */
