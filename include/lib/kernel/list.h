@@ -100,6 +100,10 @@ struct list {
    name of the outer structure STRUCT and the member name MEMBER
    of the list element.  See the big comment at the top of the
    file for an example. */
+/* 리스트 요소 LIST_ELEM의 포인터를 사용하여
+   이 리스트 요소가 내장된 외부 구조체 STRUCT로의 포인터를 반환합니다.
+   외부 구조체의 이름 STRUCT와 리스트 요소의 멤버 이름 MEMBER를 제공하세요.
+   이 파일 상단의 큰 주석에서 예제를 볼 수 있습니다. */
 #define list_entry(LIST_ELEM, STRUCT, MEMBER)           \
 	((STRUCT *) ((uint8_t *) &(LIST_ELEM)->next     \
 		- offsetof (STRUCT, MEMBER.next)))

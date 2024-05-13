@@ -28,6 +28,8 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -116,6 +118,8 @@ thread_init (void) {
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+	//추가추가
+	list_init(&sleep_list);
 	list_init (&destruction_req);
 
 	/* Set up a thread structure for the running thread. */
@@ -658,7 +662,7 @@ tick_less (const struct list_elem *a_, const struct list_elem *b_,
   const struct thread *a = list_entry (a_, struct thread, elem);
   const struct thread *b = list_entry (b_, struct thread, elem);
   
-  return a->wakeup_tick < b->wakeup_tick;
+  return a->awake_tic < b->awake_tic;
 }
 
 bool
