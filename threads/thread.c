@@ -272,7 +272,6 @@ preemption (void) {
 		return;
 	e = list_begin(&ready_list);
 	t = list_entry(e, struct thread, elem);
-
 	if(t->priority > thread_current()->priority)
 		thread_yield();
 }
