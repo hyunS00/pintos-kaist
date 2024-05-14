@@ -72,6 +72,7 @@ static void schedule (void);
 static tid_t allocate_tid (void);
 static void preemption (void);
 static bool tick_less (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
+static bool donation_priority_more (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -391,6 +392,65 @@ thread_get_wakeup_tick (void) {
 	return thread_current ()->wakeup_tick;
 }
 
+/* 우선순위를 기부 */
+void donate_priority(struct thread *holder, struct thread *receiver) {
+	enum intr_level old_level;
+	holder->priority = receiver->priority; // lock을 가지는 쓰레드의 우선순위를 lock을 요청한 쓰레드의 우선순위로 업데이트
+	old_level = intr_disable();
+	printf("도네 받을 애: %d\n",holder->priority);
+	printf("도네 줄 애: %d\n",receiver->priority);
+	list_insert_ordered(&holder->donations, &receiver->d_elem, donation_priority_more, NULL); // donations 기부자 우선순위 내림차순으로 삽입
+	donate_priority_nested(receiver);
+	intr_set_level(old_level);
+}
+/* 기부받은 도네이션 제거 */
+void remove_donation(struct lock *lock) {
+	struct thread *holder, *curr;
+	holder = thread_current();
+	curr = holder; 
+
+	ASSERT(holder == lock->holder);
+
+	while (!list_empty(&curr->donations))
+	{
+		if(curr->wait_on_lock == lock){
+			list_remove(&curr->d_elem);
+			break;
+		}
+	}
+	
+	update_priority(&holder);
+}
+/* 현재 우선순위를 origin priority업데이트 */
+void update_priority(struct thread *t) {
+
+	struct thread *front;
+	struct list_elem *e;
+	if(!list_empty(&t->donations)){
+		e = list_front(&t->donations);
+		front = list_entry(e, struct thread, elem);
+		t->priority = front->priority;
+	}
+	else{
+		t->priority = t->origin_priority;
+	}
+	list_sort(&ready_list, priority_more, NULL);
+	preemption();
+}
+/* 연쇄적인 priority chain priority 업데이트 */
+void donate_priority_nested(struct thread *t) {
+
+
+	struct thread *holder, *curr = t;
+	while (curr->wait_on_lock != NULL)
+	{
+		holder = curr->wait_on_lock->holder;
+		holder->priority = t->priority;
+		curr = holder;
+	}
+	update_priority(curr);
+}
+
 /* Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread is initially put on the ready list by
@@ -453,6 +513,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+	t->origin_priority = priority; // 원래의 우선순위 설정
+	list_init(&t->donations); // 기부해준 쓰레드들을 저장할 쓰레드 초기화
+	t->wait_on_lock = NULL; // 초기화
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -689,5 +752,16 @@ priority_more (const struct list_elem *a_, const struct list_elem *b_,
   const struct thread *a = list_entry (a_, struct thread, elem);
   const struct thread *b = list_entry (b_, struct thread, elem);
   
+  return a->priority > b->priority;
+}
+
+bool
+donation_priority_more (const struct list_elem *a_, const struct list_elem *b_,
+            void *aux UNUSED) 
+{
+  const struct thread *a = list_entry (a_, struct thread, d_elem);
+  const struct thread *b = list_entry (b_, struct thread, d_elem);
+  printf("a: %d \n",a->priority);
+  printf("b: %d \n",b->priority);
   return a->priority > b->priority;
 }

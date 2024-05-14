@@ -107,6 +107,10 @@ struct thread {
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
 	int64_t wakeup_tick; // 슬립 쓰레드 시간되면 깨우는 틱
+	int origin_priority; // 실제 오리진 우선순위
+	struct lock *wait_on_lock; // 대기중인 락
+	struct list donations; // 이 쓰레드에 우선순위를 기부하는 쓰레드들의 리스트
+	struct list_elem d_elem; // donations리스트의 elem
 };
 
 /* If false (default), use round-robin scheduler.
@@ -148,6 +152,15 @@ void do_iret (struct intr_frame *tf);
 
 void thread_sleep(int64_t end_tick);
 void thread_check_sleep_list();
+
+/* 우선순위를 기부 */
+void donate_priority(struct thread *holder, struct thread *receiver);
+/* 기부받은 도네이션 제거 */
+void remove_donation(struct lock *lock);
+/* 현재 우선순위를 origin priority업데이트 */
+void update_priority(struct thread *t);
+/* 연쇄적인 priority chain priority 업데이트 */
+void donate_priority_nested(struct thread *t);
 
 /* 우선순위 내림차순 정렬*/
 bool priority_more (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
