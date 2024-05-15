@@ -77,7 +77,8 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	if (sema->value == 0) {
-		list_insert_ordered(&sema->waiters, &thread_current ()->elem, priority_more, NULL);
+		// list_insert_ordered(&sema->waiters, &thread_current ()->elem, priority_more, NULL);
+      list_push_front(&sema->waiters, &thread_current ()->elem);
 		thread_block ();
 	}
 	sema->value--;
@@ -130,9 +131,15 @@ sema_up (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	sema->value++;
-	if (!list_empty (&sema->waiters))
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem));
+	if (!list_empty (&sema->waiters)) {
+      struct thread *curr;
+      struct list_elem *e;
+      e = list_max(&sema->waiters, priority_more, NULL);
+      curr = list_entry(e, struct thread, elem);
+      printf("elem %d thread:%d\n",e, curr->priority);
+      list_remove(e);
+		thread_unblock (curr);
+   }
 	intr_set_level (old_level);
 }
 
@@ -232,12 +239,10 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!lock_held_by_current_thread (lock));
 
    if(lock->holder != NULL){
-      printf("홀더: %s\n",lock->holder->name);
       curr = thread_current();
-      printf("홀더: %d\n", lock->holder->priority);
-      printf("홀더: %d\n", curr->priority);
+      curr->wait_on_lock = lock;
       if(curr->priority > lock->holder->priority){
-         donate_priority(&lock->holder, curr);
+         donate_priority(lock->holder, curr);
       }
    }
 	sema_down (&lock->semaphore);
@@ -286,9 +291,11 @@ lock_release (struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
    old_level = intr_disable();
-   // remove_donation(lock);
-	lock->holder = NULL;
+
 	sema_up (&lock->semaphore);
+   remove_donation(lock);
+
+	lock->holder = NULL;
    intr_set_level(old_level);
 }
 
