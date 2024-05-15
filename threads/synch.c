@@ -242,9 +242,7 @@ lock_acquire (struct lock *lock) {
    if(lock->holder != NULL){ // 락을 소유하는 holder 쓰레드가 있다면
       curr = thread_current(); // curr은 현재 진행중인 쓰레드
       curr->wait_on_lock = lock; // curr의 wait_on_lock을 지금 lock으로 설정
-      if(curr->priority > lock->holder->priority){ //지금 실행중인 쓰레드의 우선순위와 락을 소유하는 holder의 우선순위와 비교
-         donate_priority(lock->holder, curr); // 지금 쓰레드의 우선순위가 높다면 우선순위를 holder에게 기부
-      }
+      donate_priority(lock->holder, curr); // 지금 쓰레드의 우선순위가 높다면 우선순위를 holder에게 기부
    }
 	sema_down (&lock->semaphore);
 	lock->holder = thread_current ();
@@ -443,7 +441,10 @@ bool
 cond_priority_more (const struct list_elem *a_, const struct list_elem *b_,
             void *aux UNUSED) 
 {
-   return list_entry(list_begin(&list_entry(a_, struct semaphore_elem, elem)->semaphore.waiters), struct thread, elem)->priority > list_entry(list_begin(&list_entry(b_, struct semaphore_elem, elem)->semaphore.waiters), struct thread, elem)->priority;
+   const struct thread *a = list_entry (a_, struct semaphore_elem, elem)->holder;
+   const struct thread *b = list_entry (b_, struct semaphore_elem, elem)->holder;
+  
+   return a->priority > b->priority;
 }
 
 /* cond_wait에서 사용하는 insert_orderd의 우선순위 내림차순 삽입 함수*/

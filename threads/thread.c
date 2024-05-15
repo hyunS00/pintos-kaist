@@ -24,6 +24,9 @@
    Do not modify this value. */
 #define THREAD_BASIC 0xd42df210
 
+/* 우선순위 체인 최대 깊이 */
+#define NESTING_DEPTH 8
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -396,10 +399,11 @@ thread_get_wakeup_tick (void) {
 /* 우선순위를 기부 */
 void donate_priority(struct thread *holder, struct thread *receiver) {
 	enum intr_level old_level;
-	holder->priority = receiver->priority; // lock을 가지는 쓰레드의 우선순위를 lock을 요청한 쓰레드의 우선순위로 업데이트
+	if(holder->priority < receiver->priority)
+		holder->priority = receiver->priority; // lock을 가지는 쓰레드의 우선순위를 lock을 요청한 쓰레드의 우선순위로 업데이트
 	old_level = intr_disable();
 	list_push_front(&holder->donations, &receiver->d_elem); // lock을 가지고있는 holder의 도네이션 리스트에 락을 요청하는 reciver 삽입
-	donate_priority_nested(receiver); // lock을 소유하는 holder에 우선순위 전파
+	donate_priority_nested(holder); // lock을 소유하는 holder에 우선순위 전파
 	intr_set_level(old_level);
 }
 /* 기부받은 도네이션 제거 */
@@ -452,13 +456,15 @@ void update_priority(struct thread *t) {
 /* 연쇄적인 priority chain priority 업데이트 */
 void donate_priority_nested(struct thread *t) {
 	struct thread *holder, *curr = t; // lock을 소유하는 holder, 락의 홀더를 계속 탐색하며 앞으로 나아갈 curr
+	int depth = 0; // 업데이트한 깊이
 
 	// 기다리는 락이 있으면 탐색 기다리고 있는 락이 없으면 멈춤
-	while (curr->wait_on_lock != NULL)
+	while (curr->wait_on_lock != NULL && depth < NESTING_DEPTH)
 	{
 		holder = curr->wait_on_lock->holder; // holder를 업데이트
 		holder->priority = t->priority; // 홀더의 우선순위를 상속해주는 쓰레드의 우선순위로 업데이트
 		curr = holder; // curr를 초기화
+		depth++;
 	}
 
 	update_priority(curr); // 우선순위를 한번 업데이트
