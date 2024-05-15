@@ -260,21 +260,21 @@ thread_unblock (struct thread *t) {
 	list_insert_ordered(&ready_list, &t->elem, priority_more, NULL); // 우선순위대로 쓰레드 레디 리스트에 삽입
 	t->status = THREAD_READY;
 
-	preemption();
+	preemption(); // 레디 리스트로 들어갔다면 선점 가능한지 확인
 	intr_set_level (old_level);
 }
-
+/* 선점 가능한지 체크하고 가능하면 선점 */
 void
 preemption (void) {
 	struct list_elem *e;
 	struct thread *t;
 
-	if(list_empty(&ready_list) || thread_current() == idle_thread)
+	if(list_empty(&ready_list) || thread_current() == idle_thread) // 현재 쓰레드가 idle이거나 ready리스트가 비어있다면 우선순위 비교 X
 		return;
 	e = list_begin(&ready_list);
 	t = list_entry(e, struct thread, elem);
-	if(t->priority > thread_current()->priority)
-		thread_yield();
+	if(t->priority > thread_current()->priority) // 현재 쓰레드가 우선순위 내림차순으로 정렬된 ready리스트의 맨 앞의 우선순위와 비교
+		thread_yield(); // 현재 쓰레드의 우선순위가 낮으면 양보
 }
 
 /* Returns the name of the running thread. */
@@ -335,7 +335,7 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_insert_ordered(&ready_list, &curr->elem, priority_more, NULL);
+		list_insert_ordered(&ready_list, &curr->elem, priority_more, NULL); // ready리스트 내림차순으로 정렬
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -343,10 +343,10 @@ thread_yield (void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	struct thread *curr = thread_current ();
-	curr->origin_priority = new_priority;
+	struct thread *curr = thread_current (); // 현재 실행중인 쓰레드
+	curr->origin_priority = new_priority; // origin_priority 업데이트
 	
-	update_priority(curr);
+	update_priority(curr); // 변경된 origin_priority와 도네이션 리스트 비교
 }
 
 /* Returns the current thread's priority. */
@@ -398,66 +398,70 @@ void donate_priority(struct thread *holder, struct thread *receiver) {
 	enum intr_level old_level;
 	holder->priority = receiver->priority; // lock을 가지는 쓰레드의 우선순위를 lock을 요청한 쓰레드의 우선순위로 업데이트
 	old_level = intr_disable();
-	list_push_front(&holder->donations, &receiver->d_elem);
-	donate_priority_nested(receiver);
+	list_push_front(&holder->donations, &receiver->d_elem); // lock을 가지고있는 holder의 도네이션 리스트에 락을 요청하는 reciver 삽입
+	donate_priority_nested(receiver); // lock을 소유하는 holder에 우선순위 전파
 	intr_set_level(old_level);
 }
 /* 기부받은 도네이션 제거 */
 void remove_donation(struct lock *lock) {
 	enum intr_level old_level;
-	struct thread *holder, *curr_thread;
-	struct list_elem *curr;
-	holder = thread_current();
-	if(holder != lock->holder){
-		printf("홀더: %s %d\n", holder->name, holder->priority);
-		printf("락홀더: %s %d\n", lock->holder->name, lock->holder->priority);
-	}
-	ASSERT(holder == lock->holder);
+	struct thread *holder, *curr_thread; // lock을 가지고 있던 holder와 도네이션 리스트를 순회할 쓰레드 curr_thread
+	struct list_elem *curr; // 도네이션 리스트를 순회할 curr
 
+	holder = thread_current(); // 락을 반납하고 도네이션을 반납하는 쓰레드는 실행중인 쓰레드
+	ASSERT(holder == lock->holder); // 당연히 lock의 홀더랑 현재 쓰레드랑 다르면 락을 반납할 수가 없으니
 
-	if(list_empty(&holder->donations))
+	if(list_empty(&holder->donations)) // 도네이션 리스트가 비어있으면 비교할게 없음
 		return;
-	curr = list_front(&holder->donations);
+
+	curr = list_front(&holder->donations); // 도네이션을 순회할 curr 설정
 	old_level = intr_disable();
-	while (curr != list_tail(&holder->donations))
+
+	/* 도네이션 리스트를 순회하며 holder쓰레드가 가지던 락을 요청하는 모든 쓰레드들을 donations 리스트에서 제거 */
+	while (curr != list_tail(&holder->donations)) // curr가 donations 리스트의 tial이면 탐색 종료
 	{
-		curr_thread = list_entry(curr, struct thread, d_elem);
-		if(curr_thread->wait_on_lock == lock){
-			list_remove(curr);
+		curr_thread = list_entry(curr, struct thread, d_elem); // curr을 통해 curr_thread 조회
+		if(curr_thread->wait_on_lock == lock){ // curr_thread가 요청하는 락이 홀더의 lock과 같다면 리스트에서 제거
+			list_remove(curr); // 제거
 		}
-		curr = list_next(curr);
+		curr = list_next(curr); // curr을 next로 옮김
 	}
-	update_priority(holder);
+
+	update_priority(holder); // 도네이션 리스트에서 제거를 했으면 우선순위 업데이트
 	intr_set_level(old_level);
 }
+
 /* 현재 우선순위를 origin priority업데이트 */
 void update_priority(struct thread *t) {
+	struct thread *max_thread; // 도네이션 리스트에서 가장 큰 우선순위를 갖는 쓰레드
+	struct list_elem *max_elem; // 도네이션 리스트에서 가장 큰 우선순위를 갖는 list_elem
 
-	struct thread *front;
-	struct list_elem *d_e;
+	/* 도네이션 리스트가 비어있다면 origin_priority로 업데이트 */
 	if(!list_empty(&t->donations)){
-		d_e = list_max(&t->donations, donation_priority_more, NULL);
-		front = list_entry(d_e, struct thread, d_elem);
-		t->priority = front->priority;
+		max_elem = list_max(&t->donations, donation_priority_more, NULL); // 도네이션 리스트에서 가장 큰값 조회
+		max_thread = list_entry(max_elem, struct thread, d_elem); // max_elem으로 쓰레드 조회
+		t->priority = max_thread->priority; // max_thread의 우선순위로 업데이트
 	}
 	else{
-		t->priority = t->origin_priority;
+		t->priority = t->origin_priority; // 도네이션 리스트가 비어있다면 origin_priority로 업데이트
 	}
-	preemption();
+
+	preemption(); // 우선순위를 업데이트를 했으니 선점되는 쓰레드인지 체크
 }
+
 /* 연쇄적인 priority chain priority 업데이트 */
 void donate_priority_nested(struct thread *t) {
-	struct thread *holder, *curr = t;
-	// printf("대빵:%s의 우선순위%d\n",t->name, t->priority);
+	struct thread *holder, *curr = t; // lock을 소유하는 holder, 락의 홀더를 계속 탐색하며 앞으로 나아갈 curr
+
+	// 기다리는 락이 있으면 탐색 기다리고 있는 락이 없으면 멈춤
 	while (curr->wait_on_lock != NULL)
 	{
-		holder = curr->wait_on_lock->holder;
-		// printf("쫄따구:%s의 우선순위%d\n",holder->name, holder->priority);
-		holder->priority = t->priority;
-		curr = holder;
+		holder = curr->wait_on_lock->holder; // holder를 업데이트
+		holder->priority = t->priority; // 홀더의 우선순위를 상속해주는 쓰레드의 우선순위로 업데이트
+		curr = holder; // curr를 초기화
 	}
-	// printf("탈출했을때 %s의 우선순위 %d\n",curr->name, curr->priority);
-	update_priority(curr);
+
+	update_priority(curr); // 우선순위를 한번 업데이트
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -754,6 +758,7 @@ tick_less (const struct list_elem *a_, const struct list_elem *b_,
   return a->wakeup_tick < b->wakeup_tick;
 }
 
+/* 우선순위 내림차순으로 insert_ordered */
 bool
 priority_more (const struct list_elem *a_, const struct list_elem *b_,
             void *aux UNUSED) 
@@ -763,6 +768,7 @@ priority_more (const struct list_elem *a_, const struct list_elem *b_,
   return a->priority > b->priority;
 }
 
+/* 도네이션 리스트에서 우선순위가 가장큰 쓰레드를 뽑아내는 list_max 비교함수 */
 bool
 donation_priority_more (const struct list_elem *a_, const struct list_elem *b_,
             void *aux UNUSED) 
