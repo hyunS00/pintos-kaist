@@ -32,6 +32,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 static bool cond_priority_more (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
+bool sema_priority_more (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -77,7 +78,6 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	if (sema->value == 0) {
-		// list_insert_ordered(&sema->waiters, &thread_current ()->elem, priority_more, NULL);
       list_push_front(&sema->waiters, &thread_current ()->elem);
 		thread_block ();
 	}
@@ -95,6 +95,7 @@ sema_down (struct semaphore *sema) {
    감소되면 true를 반환하고, 그렇지 않으면 false를 반환합니다.
 
    이 함수는 인터럽트 핸들러에서 호출될 수 있습니다. */   
+
 bool
 sema_try_down (struct semaphore *sema) {
 	enum intr_level old_level;
@@ -126,17 +127,17 @@ sema_try_down (struct semaphore *sema) {
 void
 sema_up (struct semaphore *sema) {
 	enum intr_level old_level;
+   struct thread *curr;
+   struct list_elem *e;
 	
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
 	sema->value++;
 	if (!list_empty (&sema->waiters)) {
-      struct thread *curr;
-      struct list_elem *e;
-      e = list_max(&sema->waiters, priority_more, NULL);
+      e = list_max(&sema->waiters, sema_priority_more, NULL);
       curr = list_entry(e, struct thread, elem);
-      printf("elem %d thread:%d\n",e, curr->priority);
+
       list_remove(e);
 		thread_unblock (curr);
    }
@@ -293,6 +294,7 @@ lock_release (struct lock *lock) {
    old_level = intr_disable();
 
 	sema_up (&lock->semaphore);
+
    remove_donation(lock);
 
 	lock->holder = NULL;
@@ -444,4 +446,13 @@ cond_priority_more (const struct list_elem *a_, const struct list_elem *b_, void
   const struct thread *b = list_entry (b_, struct semaphore_elem, elem)->holder;
   
   return a->priority > b->priority;
+}
+
+bool
+sema_priority_more (const struct list_elem *a_, const struct list_elem *b_,
+            void *aux UNUSED) 
+{
+  const struct thread *a = list_entry (a_, struct thread, elem);
+  const struct thread *b = list_entry (b_, struct thread, elem);
+  return a->priority < b->priority;
 }

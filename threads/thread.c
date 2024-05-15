@@ -398,7 +398,7 @@ void donate_priority(struct thread *holder, struct thread *receiver) {
 	enum intr_level old_level;
 	holder->priority = receiver->priority; // lock을 가지는 쓰레드의 우선순위를 lock을 요청한 쓰레드의 우선순위로 업데이트
 	old_level = intr_disable();
-	list_insert_ordered(&holder->donations, &receiver->d_elem, donation_priority_more, NULL); // donations 기부자 우선순위 내림차순으로 삽입
+	list_push_front(&holder->donations, &receiver->d_elem);
 	donate_priority_nested(receiver);
 	intr_set_level(old_level);
 }
@@ -408,14 +408,16 @@ void remove_donation(struct lock *lock) {
 	struct thread *holder, *curr_thread;
 	struct list_elem *curr;
 	holder = thread_current();
-
+	if(holder != lock->holder){
+		printf("홀더: %s %d\n", holder->name, holder->priority);
+		printf("락홀더: %s %d\n", lock->holder->name, lock->holder->priority);
+	}
 	ASSERT(holder == lock->holder);
 
 
 	if(list_empty(&holder->donations))
 		return;
 	curr = list_front(&holder->donations);
-
 	old_level = intr_disable();
 	while (curr != list_tail(&holder->donations))
 	{
@@ -434,30 +436,27 @@ void update_priority(struct thread *t) {
 	struct thread *front;
 	struct list_elem *d_e;
 	if(!list_empty(&t->donations)){
-		d_e = list_front(&t->donations);
+		d_e = list_max(&t->donations, donation_priority_more, NULL);
 		front = list_entry(d_e, struct thread, d_elem);
 		t->priority = front->priority;
 	}
 	else{
 		t->priority = t->origin_priority;
-		// printf("오리진%s: %d\n",t->name, t->origin_priority);
 	}
-	printf("%s: %d\n",t->name, t->priority);
-	list_sort(&ready_list, priority_more, NULL);
 	preemption();
 }
 /* 연쇄적인 priority chain priority 업데이트 */
 void donate_priority_nested(struct thread *t) {
 	struct thread *holder, *curr = t;
-	printf("대빵:%s의 우선순위%d\n",t->name, t->priority);
+	// printf("대빵:%s의 우선순위%d\n",t->name, t->priority);
 	while (curr->wait_on_lock != NULL)
 	{
 		holder = curr->wait_on_lock->holder;
-		printf("쫄따구:%s의 우선순위%d\n",holder->name, holder->priority);
+		// printf("쫄따구:%s의 우선순위%d\n",holder->name, holder->priority);
 		holder->priority = t->priority;
 		curr = holder;
 	}
-	printf("탈출했을때 %s의 우선순위 %d\n",curr->name, curr->priority);
+	// printf("탈출했을때 %s의 우선순위 %d\n",curr->name, curr->priority);
 	update_priority(curr);
 }
 
@@ -761,7 +760,6 @@ priority_more (const struct list_elem *a_, const struct list_elem *b_,
 {
   const struct thread *a = list_entry (a_, struct thread, elem);
   const struct thread *b = list_entry (b_, struct thread, elem);
-  
   return a->priority > b->priority;
 }
 
@@ -771,5 +769,5 @@ donation_priority_more (const struct list_elem *a_, const struct list_elem *b_,
 {
   const struct thread *a = list_entry (a_, struct thread, d_elem);
   const struct thread *b = list_entry (b_, struct thread, d_elem);
-  return a->priority > b->priority;
+  return a->priority < b->priority;
 }
