@@ -108,7 +108,7 @@ timer_sleep (int64_t ticks) {
 
 	ASSERT (intr_get_level () == INTR_ON);
 
-	if(timer_elapsed(start) < ticks)
+	if(timer_elapsed(start) < ticks) // 끝나고자하는 tick보다 작다면 쓰레드 슬립
 		thread_sleep(start + ticks);
 }
 
@@ -146,7 +146,7 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
-	thread_check_sleep_list();
+	thread_check_sleep_list(); // 매 인터럽트마다 리스트를 확인해 쓰레드 깨우기
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

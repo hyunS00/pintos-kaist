@@ -239,11 +239,11 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
-   if(lock->holder != NULL){
-      curr = thread_current();
-      curr->wait_on_lock = lock;
-      if(curr->priority > lock->holder->priority){
-         donate_priority(lock->holder, curr);
+   if(lock->holder != NULL){ // 락을 소유하는 holder 쓰레드가 있다면
+      curr = thread_current(); // curr은 현재 진행중인 쓰레드
+      curr->wait_on_lock = lock; // curr의 wait_on_lock을 지금 lock으로 설정
+      if(curr->priority > lock->holder->priority){ //지금 실행중인 쓰레드의 우선순위와 락을 소유하는 holder의 우선순위와 비교
+         donate_priority(lock->holder, curr); // 지금 쓰레드의 우선순위가 높다면 우선순위를 holder에게 기부
       }
    }
 	sema_down (&lock->semaphore);
@@ -295,7 +295,7 @@ lock_release (struct lock *lock) {
 
 	sema_up (&lock->semaphore);
 
-   remove_donation(lock);
+   remove_donation(lock); // 현재 쓰레드의 donation을 반납
 
 	lock->holder = NULL;
    intr_set_level(old_level);
@@ -315,7 +315,7 @@ lock_held_by_current_thread (const struct lock *lock) {
 struct semaphore_elem {
 	struct list_elem elem;              /* List element. */
 	struct semaphore semaphore;         /* This semaphore. */
-   struct thread *holder
+   struct thread *holder // 이 세마포어의 주인 쓰레드
 };
 
 /* Initializes condition variable COND.  A condition variable
@@ -440,14 +440,13 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 }
 
 bool
-cond_priority_more (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED) 
+cond_priority_more (const struct list_elem *a_, const struct list_elem *b_,
+            void *aux UNUSED) 
 {
-  const struct thread *a = list_entry (a_, struct semaphore_elem, elem)->holder;
-  const struct thread *b = list_entry (b_, struct semaphore_elem, elem)->holder;
-  
-  return a->priority > b->priority;
+   return list_entry(list_begin(&list_entry(a_, struct semaphore_elem, elem)->semaphore.waiters), struct thread, elem)->priority > list_entry(list_begin(&list_entry(b_, struct semaphore_elem, elem)->semaphore.waiters), struct thread, elem)->priority;
 }
 
+/* cond_wait에서 사용하는 insert_orderd의 우선순위 내림차순 삽입 함수*/
 bool
 sema_priority_more (const struct list_elem *a_, const struct list_elem *b_,
             void *aux UNUSED) 
