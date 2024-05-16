@@ -349,7 +349,7 @@ thread_set_priority (int new_priority) {
 	struct thread *curr = thread_current (); // 현재 실행중인 쓰레드
 	curr->origin_priority = new_priority; // origin_priority 업데이트
 	
-	update_priority(curr); // 변경된 origin_priority와 도네이션 리스트 비교
+	donation_update_priority(curr); // 변경된 origin_priority와 도네이션 리스트 비교
 }
 
 /* Returns the current thread's priority. */
@@ -407,7 +407,7 @@ void donate_priority(struct thread *holder, struct thread *receiver) {
 	intr_set_level(old_level);
 }
 /* 기부받은 도네이션 제거 */
-void remove_donation(struct lock *lock) {
+void donation_remove(struct lock *lock) {
 	enum intr_level old_level;
 	struct thread *holder, *curr_thread; // lock을 가지고 있던 holder와 도네이션 리스트를 순회할 쓰레드 curr_thread
 	struct list_elem *curr; // 도네이션 리스트를 순회할 curr
@@ -431,12 +431,12 @@ void remove_donation(struct lock *lock) {
 		curr = list_next(curr); // curr을 next로 옮김
 	}
 
-	update_priority(holder); // 도네이션 리스트에서 제거를 했으면 우선순위 업데이트
+	donation_update_priority(holder); // 도네이션 리스트에서 제거를 했으면 우선순위 업데이트
 	intr_set_level(old_level);
 }
 
 /* 현재 우선순위를 origin priority업데이트 */
-void update_priority(struct thread *t) {
+void donation_update_priority(struct thread *t) {
 	struct thread *max_thread; // 도네이션 리스트에서 가장 큰 우선순위를 갖는 쓰레드
 	struct list_elem *max_elem; // 도네이션 리스트에서 가장 큰 우선순위를 갖는 list_elem
 
@@ -444,12 +444,15 @@ void update_priority(struct thread *t) {
 	if(!list_empty(&t->donations)){
 		max_elem = list_max(&t->donations, donation_priority_more, NULL); // 도네이션 리스트에서 가장 큰값 조회
 		max_thread = list_entry(max_elem, struct thread, d_elem); // max_elem으로 쓰레드 조회
-		t->priority = max_thread->priority; // max_thread의 우선순위로 업데이트
+		if(t->origin_priority < max_thread->priority) // donations 리스트에는 우선순위가 작은 녀석들도 들어있으니 오리진 보다 작으면 업데이트 시키면 안됨
+			t->priority = max_thread->priority; // max_thread의 우선순위로 업데이트
+		else
+			t->priority = t->origin_priority; // 그냥 오리진으로 업데이트
 	}
 	else{
 		t->priority = t->origin_priority; // 도네이션 리스트가 비어있다면 origin_priority로 업데이트
 	}
-
+	
 	preemption(); // 우선순위를 업데이트를 했으니 선점되는 쓰레드인지 체크
 }
 
@@ -462,12 +465,15 @@ void donate_priority_nested(struct thread *t) {
 	while (curr->wait_on_lock != NULL && depth < NESTING_DEPTH)
 	{
 		holder = curr->wait_on_lock->holder; // holder를 업데이트
+		if( holder->priority > t->priority){
+			break;
+		}
 		holder->priority = t->priority; // 홀더의 우선순위를 상속해주는 쓰레드의 우선순위로 업데이트
 		curr = holder; // curr를 초기화
 		depth++;
 	}
 
-	update_priority(curr); // 우선순위를 한번 업데이트
+	donation_update_priority(curr); // 우선순위를 한번 업데이트
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.

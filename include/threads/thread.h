@@ -156,9 +156,9 @@ void thread_check_sleep_list();
 /* 우선순위를 기부 */
 void donate_priority(struct thread *holder, struct thread *receiver);
 /* 기부받은 도네이션 제거 */
-void remove_donation(struct lock *lock);
+void donation_remove(struct lock *lock);
 /* 현재 우선순위를 origin priority업데이트 */
-void update_priority(struct thread *t);
+void donation_update_priority(struct thread *t);
 /* 연쇄적인 priority chain priority 업데이트 */
 void donate_priority_nested(struct thread *t);
 

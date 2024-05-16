@@ -293,7 +293,7 @@ lock_release (struct lock *lock) {
 
 	sema_up (&lock->semaphore);
 
-   remove_donation(lock); // 현재 쓰레드의 donation을 반납
+   donation_remove(lock); // 현재 쓰레드의 donation을 반납
 
 	lock->holder = NULL;
    intr_set_level(old_level);
