@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/fixed_point.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -111,6 +112,9 @@ struct thread {
 	struct lock *wait_on_lock; // 대기중인 락
 	struct list donations; // 이 쓰레드에 우선순위를 기부하는 쓰레드들의 리스트
 	struct list_elem d_elem; // donations리스트의 elem
+	struct list_elem allelem; // all_list에 저장될 elem
+	int nice; // 다른 쓰레드들에게 얼마나 양보를 해주는지 나타내는 변수 -20 ~ 20 을 가짐 음수이면 우선순위가 높아짐 양수이면 우선순위가 낮아짐
+	real recent_cpu; // 이 쓰레드가 최근에 cpu를 얼마나 사용했는지 나타내는 변수 현재 쓰레드가 많이 running할 수록 값이 낮아짐
 };
 
 /* If false (default), use round-robin scheduler.
@@ -161,6 +165,15 @@ void donation_remove(struct lock *lock);
 void donation_update_priority(struct thread *t);
 /* 연쇄적인 priority chain priority 업데이트 */
 void donate_priority_nested(struct thread *t);
+
+/* 1초마다 recent_cpu를 새 값으로 업데이트 */
+void update_recent_cpu();
+
+/* 매 tick마다 recent_cpu를 1씩 증가 */
+void increase_recent_cpu();
+
+/* 4tick마다 모든 쓰레드의 우선순위 업데이트 */
+void update_priority();
 
 /* 우선순위 내림차순 정렬*/
 bool priority_more (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);

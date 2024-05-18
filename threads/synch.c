@@ -239,10 +239,12 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
-   if(lock->holder != NULL){ // 락을 소유하는 holder 쓰레드가 있다면
-      curr = thread_current(); // curr은 현재 진행중인 쓰레드
-      curr->wait_on_lock = lock; // curr의 wait_on_lock을 지금 lock으로 설정
-      donate_priority(lock->holder, curr); // 지금 쓰레드의 우선순위가 높다면 우선순위를 holder에게 기부
+   if(!thread_mlfqs){ // mlfq 스케쥴링 방식이 아닐때만 실행
+      if(lock->holder != NULL){ // 락을 소유하는 holder 쓰레드가 있다면
+         curr = thread_current(); // curr은 현재 진행중인 쓰레드
+         curr->wait_on_lock = lock; // curr의 wait_on_lock을 지금 lock으로 설정
+         donate_priority(lock->holder, curr); // 지금 쓰레드의 우선순위가 높다면 우선순위를 holder에게 기부
+      }
    }
 	sema_down (&lock->semaphore);
 	lock->holder = thread_current ();
@@ -293,7 +295,8 @@ lock_release (struct lock *lock) {
 
 	sema_up (&lock->semaphore);
 
-   donation_remove(lock); // 현재 쓰레드의 donation을 반납
+   if(!thread_mlfqs) // mlfq 스케쥴링 방식이 아닐때만 실행
+      donation_remove(lock); // 현재 쓰레드의 donation을 반납
 
 	lock->holder = NULL;
    intr_set_level(old_level);
@@ -308,7 +311,7 @@ lock_held_by_current_thread (const struct lock *lock) {
 
 	return lock->holder == thread_current ();
 }
-
+
 /* One semaphore in a list. */
 struct semaphore_elem {
 	struct list_elem elem;              /* List element. */
