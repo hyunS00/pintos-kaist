@@ -279,14 +279,17 @@ thread_unblock (struct thread *t) {
 		preemption(); // 레디 리스트로 들어갔다면 선점 가능한지 확인
 	intr_set_level (old_level);
 }
+
 /* 선점 가능한지 체크하고 가능하면 선점 */
 void
 preemption (void) {
 	struct list_elem *e;
 	struct thread *t;
 
-	if(list_empty(&ready_list) || thread_current() == idle_thread) // 현재 쓰레드가 idle이거나 ready리스트가 비어있다면 우선순위 비교 X
+	/* 현재 쓰레드가 idle이거나 ready리스트가 비어있다면 우선순위 비교 X */
+	if(list_empty(&ready_list) || thread_current() == idle_thread)
 		return;
+		
 	e = list_begin(&ready_list);
 	t = list_entry(e, struct thread, elem);
 	if(t->priority > thread_current()->priority) // 현재 쓰레드가 우선순위 내림차순으로 정렬된 ready리스트의 맨 앞의 우선순위와 비교
@@ -519,8 +522,10 @@ void update_priority(){
 /* 우선순위를 기부 */
 void donate_priority(struct thread *holder, struct thread *receiver) {
 	enum intr_level old_level;
+
 	if(holder->priority < receiver->priority)
 		holder->priority = receiver->priority; // lock을 가지는 쓰레드의 우선순위를 lock을 요청한 쓰레드의 우선순위로 업데이트
+
 	old_level = intr_disable();
 	list_push_front(&holder->donations, &receiver->d_elem); // lock을 가지고있는 holder의 도네이션 리스트에 락을 요청하는 reciver 삽입
 	donate_priority_nested(holder); // lock을 소유하는 holder에 우선순위 전파
@@ -591,6 +596,23 @@ void donate_priority_nested(struct thread *t) {
 		holder->priority = t->priority; // 홀더의 우선순위를 상속해주는 쓰레드의 우선순위로 업데이트
 		curr = holder; // curr를 초기화
 		depth++; 
+	}
+}
+
+/* 락을 얻은 쓰레드가 */
+void update_donations_list(struct list *waiters){
+	struct list_elem *e, *d_e; // waiters list를 순회할 elem과 d_elem
+	struct thread *curr; // 현재 실행중인 쓰레드 락을 가지고있는 쓰레드
+
+	if(list_empty(waiters)) // 대기중인 쓰레드가 없다면 return
+		return;
+	
+	curr = thread_current(); // 현재 실행중인 쓰레드 지정
+
+	/* waiter 리스트를 순회하며 curr쓰레드의 donations리스트에 d_elem 삽입 */
+	for (e = list_begin (waiters); e != list_end (waiters); e = list_next (e)){
+		d_e = &list_entry(e, struct thread, elem)->d_elem;
+		list_push_front(&curr->donations, d_e);
 	}
 }
 
