@@ -165,6 +165,8 @@ void donation_remove(struct lock *lock);
 void donation_update_priority(struct thread *t);
 /* 연쇄적인 priority chain priority 업데이트 */
 void donate_priority_nested(struct thread *t);
+/* donations_list 업데이트 */
+void update_donations_list(struct list *waiters);
 
 /* 1초마다 recent_cpu를 새 값으로 업데이트 */
 void update_recent_cpu();
@@ -174,6 +176,7 @@ void increase_recent_cpu();
 
 /* 4tick마다 모든 쓰레드의 우선순위 업데이트 */
 void update_priority();
+
 
 /* 우선순위 내림차순 정렬*/
 bool priority_more (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
