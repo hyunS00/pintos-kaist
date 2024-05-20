@@ -147,7 +147,8 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
 	thread_check_sleep_list(); // 매 인터럽트마다 리스트를 확인해 쓰레드 깨우기
-	if(thread_mlfqs){
+	
+	if(thread_mlfqs){ //mlfqs 모드일때만 실행
 
 		increase_recent_cpu(); // recent_cpu를 매 tick마다 증가
 
