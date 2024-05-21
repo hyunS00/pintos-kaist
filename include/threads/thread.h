@@ -98,6 +98,9 @@ struct thread {
 	struct list_elem elem;              /* List element. */
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
+	/* pml4는 "Page Map Level 4"를 나타내는 약어다
+	 * x86-64 아키텍처에서는 4단계 페이지 테이블 구조를 사용하여 가상 주소를 물리 주소로 변환한다
+	 * 이 중에서 가장 상위 레벨이 바로 PML4입니다.*/
 	uint64_t *pml4;                     /* Page map level 4 */
 #endif
 #ifdef VM
