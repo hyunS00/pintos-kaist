@@ -53,6 +53,7 @@ struct intr_frame {
 	uint16_t __pad3;
 	uint32_t __pad4;
 
+
 	/* Pushed by intrNN_stub in intr-stubs.S. */
 	/* intr-stubs.S의 intrNN_stub에 의해 푸시됨. */
 	
