@@ -349,31 +349,30 @@ process_activate (struct thread *next) {
 /* 실행 파일 헤더. [ELF1] 1-4부터 1-8을 참조하세요.
  * 이것은 ELF 바이너리의 맨 처음에 나타납니다. */
 struct ELF64_hdr {
-	unsigned char e_ident[EI_NIDENT];
-	uint16_t e_type;
-	uint16_t e_machine;
-	uint32_t e_version;
-	uint64_t e_entry;
-	uint64_t e_phoff;
-	uint64_t e_shoff;
-	uint32_t e_flags;
-	uint16_t e_ehsize;
-	uint16_t e_phentsize;
-	uint16_t e_phnum;
-	uint16_t e_shentsize;
-	uint16_t e_shnum;
-	uint16_t e_shstrndx;
+unsigned char e_ident[EI_NIDENT];  // ELF 식별자
+uint16_t      e_type;             // 파일 유형
+uint16_t      e_machine;          // 대상 아키텍처
+uint32_t      e_version;          // 파일 버전
+uint64_t      e_entry;            // 프로그램 엔트리 포인트 주소
+uint64_t      e_phoff;            // 프로그램 헤더 테이블의 파일 오프셋
+uint64_t      e_shoff;            // 섹션 헤더 테이블의 파일 오프셋
+uint32_t      e_flags;            // 프로세서 별 플래그
+uint16_t      e_ehsize;           // ELF 헤더의 크기
+uint16_t      e_phentsize;        // 프로그램 헤더 엔트리의 크기
+uint16_t      e_phnum;            // 프로그램 헤더 엔트리의 개수
+uint16_t      e_shentsize;        // 섹션 헤더 엔트리의 크기
+uint16_t      e_shnum;            // 섹션 헤더 엔트리의 개수
+uint16_t      e_shstrndx;         // 섹션 이름 문자열 테이블의 섹션 헤더 인덱스
 };
-
 struct ELF64_PHDR {
-	uint32_t p_type;
-	uint32_t p_flags;
-	uint64_t p_offset;
-	uint64_t p_vaddr;
-	uint64_t p_paddr;
-	uint64_t p_filesz;
-	uint64_t p_memsz;
-	uint64_t p_align;
+uint32_t      p_type;             // 세그먼트 유형
+uint32_t      p_flags;            // 세그먼트 플래그 (읽기, 쓰기, 실행 권한)
+uint64_t      p_offset;           // 세그먼트 파일 오프셋
+uint64_t      p_vaddr;            // 세그먼트 가상 주소
+uint64_t      p_paddr;            // 세그먼트 물리 주소 (사용되지 않음)
+uint64_t      p_filesz;           // 파일 이미지의 세그먼트 크기
+uint64_t      p_memsz;            // 메모리 이미지의 세그먼트 크기
+uint64_t      p_align;            // 세그먼트 정렬 값
 };
 
 /* Abbreviations */
@@ -591,6 +590,7 @@ static bool install_page (void *upage, void *kpage, bool writable);
  *
  * Return true if successful, false if a memory allocation error
  * or disk read error occurs. */
+
 /* FILE의 OFS 오프셋에서 시작하는 세그먼트를 UPAGE 주소에 로드합니다. *
  * 총 READ_BYTES + ZERO_BYTES 바이트의 가상 메모리가 다음과 같이 초기화됩니다: *
  * *
