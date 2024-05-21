@@ -108,7 +108,7 @@ timer_sleep (int64_t ticks) {
 
 	ASSERT (intr_get_level () == INTR_ON);
 
-	if(timer_elapsed(start) < ticks)
+	if(timer_elapsed(start) < ticks) // 끝나고자하는 tick보다 작다면 쓰레드 슬립
 		thread_sleep(start + ticks);
 }
 
@@ -139,15 +139,30 @@ void
 timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
 /* 타이머 인터럽트 핸들러. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
-	thread_check_sleep_list();
+	thread_check_sleep_list(); // 매 인터럽트마다 리스트를 확인해 쓰레드 깨우기
+	
+	if(thread_mlfqs){ //mlfqs 모드일때만 실행
 
+		increase_recent_cpu(); // recent_cpu를 매 tick마다 증가
+
+		// 1초마다 recent_cpu를 새 값으로 업데이트
+		if(timer_ticks() % TIMER_FREQ == 0){
+			update_load_average(); // load_average를 업데이트
+			update_recent_cpu();
+		}
+
+		/* 4틱마다 모든 쓰레드들의 우선순위 업데이트 */
+		if(timer_ticks() % 4 == 0) {
+			update_priority();
+		}
+	}
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
