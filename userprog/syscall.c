@@ -49,82 +49,82 @@ syscall_init (void) {
 void
 syscall_handler (struct intr_frame *f UNUSED) {
 	int sys_number = f->R.rax;
-	switch (sys_number)
-	{
-	case SYS_HALT: 							// 운영체제 종료
-		halt();
-	case SYS_EXIT:							// 프로그램 종료 후 상태 반환
-		exit(f->R.rdi);
-	case SYS_FORK:							// 자식 프로세스 생성
-		fork(f->R.rdi);
-	case SYS_EXEC:							// 새 프로그램 실행
-		exec(f->R.rdi);
-	case SYS_WAIT:							// 자식 프로세스가 종료될 때까지 기다림
-		wait(f->R.rdi);		
-	case SYS_CREATE:						// 새 파일 생성
-		create(f->R.rdi, f->R.rsi); 		
-	case SYS_REMOVE:						// 파일 삭제
-		remove(f->R.rdi);
-	case SYS_OPEN:							// 파일 열기
-		open(f->R.rdi);
-	case SYS_FILESIZE:						// 파일 사이즈 반환
-		filesize(f->R.rdi);
-	case SYS_READ:							// 파일에서 데이터 읽기
-		read(f->R.rdi, f->R.rsi, f->R.rdx);
-	case SYS_WRITE:							// 파일에 데이터 쓰기
-		write(f->R.rdi, f->R.rsi, f->R.rdx);
-	case SYS_SEEK:							// 파일의 읽기/쓰기 포인터 이동
-		seek(f->R.rdi, f->R.rsi);
-	case SYS_TELL:							// 파일의 현재 읽기/쓰기 데이터 반환
-		tell(f->R.rdi);
-	case SYS_CLOSE:							// 파일 닫기
-		close(f->R.rdi);
-	}
+	// switch (sys_number)
+	// {
+	// case SYS_HALT: 							// 운영체제 종료
+	// 	halt();
+	// case SYS_EXIT:							// 프로그램 종료 후 상태 반환
+	// 	exit(f->R.rdi);
+	// case SYS_FORK:							// 자식 프로세스 생성
+	// 	fork(f->R.rdi);
+	// case SYS_EXEC:							// 새 프로그램 실행
+	// 	exec(f->R.rdi);
+	// case SYS_WAIT:							// 자식 프로세스가 종료될 때까지 기다림
+	// 	wait(f->R.rdi);		
+	// case SYS_CREATE:						// 새 파일 생성
+	// 	create(f->R.rdi, f->R.rsi); 		
+	// case SYS_REMOVE:						// 파일 삭제
+	// 	remove(f->R.rdi);
+	// case SYS_OPEN:							// 파일 열기
+	// 	open(f->R.rdi);
+	// case SYS_FILESIZE:						// 파일 사이즈 반환
+	// 	filesize(f->R.rdi);
+	// case SYS_READ:							// 파일에서 데이터 읽기
+	// 	read(f->R.rdi, f->R.rsi, f->R.rdx);
+	// case SYS_WRITE:							// 파일에 데이터 쓰기
+	// 	write(f->R.rdi, f->R.rsi, f->R.rdx);
+	// case SYS_SEEK:							// 파일의 읽기/쓰기 포인터 이동
+	// 	seek(f->R.rdi, f->R.rsi);
+	// case SYS_TELL:							// 파일의 현재 읽기/쓰기 데이터 반환
+	// 	tell(f->R.rdi);
+	// case SYS_CLOSE:							// 파일 닫기
+	// 	close(f->R.rdi);
+	// }
 	printf ("system call!\n");
 	thread_exit ();
 }
 
-/*User memory access는 이후 시스템 콜 구현할 때 메모리에 접근할 텐데, 
-이때 접근하는 메모리 주소가 유저 영역인지 커널 영역인지를 체크*/
-void check_address (void *addr){
-	struct thread *t = thread_current();
-	if (!is_user_vaddr(addr) == NULL || pml4_get_page(t->pml4, addr)){ 	// 포인터가 가리키는 주소가 유저영역의 주소인지 확인 || 포인터가 가리키는 주소가 유저 영역 내에 있지만 페이자로 할당하지 않은 영역일수도 잇으니 체크
-	exit(-1);															// 잘못된 접근일 경우 프로세스 종
-	}
-}
+// /*User memory access는 이후 시스템 콜 구현할 때 메모리에 접근할 텐데, 
+// 이때 접근하는 메모리 주소가 유저 영역인지 커널 영역인지를 체크*/
+// void check_address (void *addr){
+// 	struct thread *t = thread_current();
+// 	if (!is_user_vaddr(addr) == NULL || pml4_get_page(t->pml4, addr)){ 	// 포인터가 가리키는 주소가 유저영역의 주소인지 확인 || 포인터가 가리키는 주소가 유저 영역 내에 있지만 페이자로 할당하지 않은 영역일수도 잇으니 체크
+// 	exit(-1);															// 잘못된 접근일 경우 프로세스 종
+// 	}
+// }
 
-/* pintos 종료시키는 함수 */
-void halt(void){
-	power_off();
-}
+// /* pintos 종료시키는 함수 */
+// void halt(void){
+// 	power_off();
+// }
 
-/* 현재 프로세스를 종료시키는 시스템 콜 */
-void exit(int status){
-	struct thread *t = thread_current();
-	printf("%s : exit%d\n", t->name, t->status);
-	thread_exit();
-}
+// /* 현재 프로세스를 종료시키는 시스템 콜 */
+// void exit(int status){
+// 	struct thread *t = thread_current();
+// 	printf("%s : exit%d\n", t->name, t->status);
+// 	thread_exit();
+// }
 
-/* 파일 생성하는 시스템 콜 */
-bool create (const char *file, unsigned initial_size) {
-	/* 성공이면 true, 실패면 false */
-	check_address(file);
-	if (filesys_create(file, initial_size)) {
-		return true;
-	}
-	else {
-		return false;
-	}
-}
+// /* 파일 생성하는 시스템 콜 */
+// bool create (const char *file, unsigned initial_size) {
+// 	/* 성공이면 true, 실패면 false */
+// 	check_address(file);
+// 	if (filesys_create(file, initial_size)) {
+// 		return true;
+// 	}
+// 	else {
+// 		return false;
+// 	}
+// }
 
-/*파일을 제거하는 함수, 
-이 때 파일을 제거하더라도 그 이전에 파일을 오픈했다면 
-해당 오픈 파일은 close 되지 않고 그대로 켜진 상태로 남아있는다.*/
-bool remove (const char *file) {
-	check_address(file);
-	if (filesys_remove(file)) {
-		return true;
-	} else {
-		return false;
-	}
-}
+// /*파일을 제거하는 함수, 
+// 이 때 파일을 제거하더라도 그 이전에 파일을 오픈했다면 
+// 해당 오픈 파일은 close 되지 않고 그대로 켜진 상태로 남아있는다.*/
+// bool remove (const char *file) {
+// 	check_address(file);
+// 	if (filesys_remove(file)) {
+// 		return true;
+// 	} else {
+// 		return false;
+// 	}
+// }

@@ -58,6 +58,10 @@ process_create_initd (const char *file_name) { // process_execute()
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
+	char *save_ptr;
+	printf("file_name : %s\n", file_name);
+	strtok_r(file_name, " ", &save_ptr);
+	printf("file_name : %s\n", file_name);
 
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
