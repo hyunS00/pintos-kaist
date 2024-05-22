@@ -246,8 +246,15 @@ lock_acquire (struct lock *lock) {
          donate_priority(lock->holder, curr); // 지금 쓰레드의 우선순위가 높다면 우선순위를 holder에게 기부
       }
    }
+
 	sema_down (&lock->semaphore);
+
 	lock->holder = thread_current ();
+
+   if(!thread_mlfqs){
+      /* 락을 쥐고있는 쓰레드의 donations 리스트에 현재 대기중인 쓰레드들을 넣는다 */
+      update_donations_list(&lock->semaphore.waiters);
+   }
 }
 
 /* Tries to acquires LOCK and returns true if successful or false

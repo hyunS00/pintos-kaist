@@ -29,6 +29,7 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+#define USERPROG // 유저프로그램 모드 활성화
 /* A kernel thread or user process.
  *
  * Each thread structure is stored in its own 4 kB page.  The
@@ -97,6 +98,9 @@ struct thread {
 	struct list_elem elem;              /* List element. */
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
+	/* pml4는 "Page Map Level 4"를 나타내는 약어다
+	 * x86-64 아키텍처에서는 4단계 페이지 테이블 구조를 사용하여 가상 주소를 물리 주소로 변환한다
+	 * 이 중에서 가장 상위 레벨이 바로 PML4입니다.*/
 	uint64_t *pml4;                     /* Page map level 4 */
 #endif
 #ifdef VM
@@ -165,6 +169,8 @@ void donation_remove(struct lock *lock);
 void donation_update_priority(struct thread *t);
 /* 연쇄적인 priority chain priority 업데이트 */
 void donate_priority_nested(struct thread *t);
+/* donations_list 업데이트 */
+void update_donations_list(struct list *waiters);
 
 /* 1초마다 recent_cpu를 새 값으로 업데이트 */
 void update_recent_cpu();
@@ -174,6 +180,7 @@ void increase_recent_cpu();
 
 /* 4tick마다 모든 쓰레드의 우선순위 업데이트 */
 void update_priority();
+
 
 /* 우선순위 내림차순 정렬*/
 bool priority_more (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);

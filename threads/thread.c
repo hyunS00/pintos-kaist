@@ -275,18 +275,21 @@ thread_unblock (struct thread *t) {
 	ASSERT (t->status == THREAD_BLOCKED);
 	list_insert_ordered(&ready_list, &t->elem, priority_more, NULL); // 우선순위대로 쓰레드 레디 리스트에 삽입
 	t->status = THREAD_READY;
-	if(!intr_context())
+	if(!intr_context()) // 현재 실행중인 컨텍스트가 인터럽트이면 선점이 되어버리면 안됨
 		preemption(); // 레디 리스트로 들어갔다면 선점 가능한지 확인
 	intr_set_level (old_level);
 }
+
 /* 선점 가능한지 체크하고 가능하면 선점 */
 void
 preemption (void) {
 	struct list_elem *e;
 	struct thread *t;
 
-	if(list_empty(&ready_list) || thread_current() == idle_thread) // 현재 쓰레드가 idle이거나 ready리스트가 비어있다면 우선순위 비교 X
+	/* 현재 쓰레드가 idle이거나 ready리스트가 비어있다면 우선순위 비교 X */
+	if(list_empty(&ready_list) || thread_current() == idle_thread)
 		return;
+		
 	e = list_begin(&ready_list);
 	t = list_entry(e, struct thread, elem);
 	if(t->priority > thread_current()->priority) // 현재 쓰레드가 우선순위 내림차순으로 정렬된 ready리스트의 맨 앞의 우선순위와 비교
@@ -360,11 +363,12 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
 	struct thread *curr = thread_current (); // 현재 실행중인 쓰레드
-	if(!thread_mlfqs){
+
+	if(!thread_mlfqs){ // mlfqs 모드가 아니면
 		curr->origin_priority = new_priority; // origin_priority 업데이트
 		donation_update_priority(curr); // 변경된 origin_priority와 도네이션 리스트 비교
 	}
-	else{
+	else{ // mlfqs 모드이면
 		curr->priority = new_priority;
 		preemption();
 	}
@@ -379,8 +383,8 @@ thread_get_priority (void) {
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice) {
-	thread_current()->nice = nice;
-	update_priority();
+	thread_current()->nice = nice; // 현재 실행중인 쓰레드의 나이스를 변경
+	update_priority(); // nice를 변경했으니 우선순위를 한번 업데이트
 }
 
 /* Returns the current thread's nice value. */
@@ -392,12 +396,22 @@ thread_get_nice (void) {
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) {
+	/* 
+	 * load_avg 정수변환  
+	 * 100을 곱하는 이유는 소수 둘째자리 까지 표현하는 거라서 그럼
+	 * 사용예시: printf("%d.%02d",thread_get_load_avg()/100, thread_get_load_avg() %100)
+	 */
 	return fixed_to_nearest_integer(load_average * 100);
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) {
+	/* 
+	 * recent_cpu를 정수변환  
+	 * 100을 곱하는 이유는 소수 둘째자리 까지 표현하는 거라서 그럼
+	 * 사용예시: printf("%d.%02d",thread_get_recent_cpu()/100, thread_get_recent_cpu() %100)
+	 */
 	return fixed_to_nearest_integer(thread_current()->recent_cpu * 100);
 }
 
@@ -412,88 +426,106 @@ thread_get_wakeup_tick (void) {
 	return thread_current ()->wakeup_tick;
 }
 
+/* 1초마다 load_average업데이트 */
 void update_load_average(){
-	enum intr_level old_level;
-	old_level = intr_disable();
 	int ready_threads = list_size(&ready_list); // 레디중인 쓰레드와 현재 실행중인 쓰레드의 갯수
+
+	/* 현재 실행중인 쓰레드가 idle_thread가 아니면 현재 실행중인 쓰래드 까지 포함시켜 load_avergea 계산*/
 	if(thread_current() != idle_thread)
 		ready_threads++;
 
+	/* 59를 실수로 변환한 fifty_nine, 60을 실수로 변환한 sixty 1을 실수로 변환한 one 계산한 값을 임시 저장할 num1, num2 */
 	real fifty_nine, sixty, one, num1, num2;
+
 	fifty_nine = integer_to_fixed(59); // 정수 59를 실수로 변환
 	sixty = integer_to_fixed(60); // 정수 60을 실수로 변환
 	one = integer_to_fixed(1); // 정수 1을 실수로 변환
 
 	num1 = divide_fixed(fifty_nine, sixty); // 59/60 실수계산
 	num1 = multiple_fixed(num1, load_average); // (59/60 * load_average)
-	//0.5166666667
 	num2 = divide_fixed(one, sixty); // 1/60 실수 계산
+
 	num2 *= ready_threads; // (1/60 * ready_threads)
+
+	/* load_average 업데이트 */
 	load_average = num1 + num2; // (59/60 * load_average) + (1/60 * ready_threads)
-	intr_set_level(old_level);
 }
 
+/* 감쇠율을 계산하는 함수 */
 real get_decay(){
 	real num1, num2;
 
 	num1 = load_average * 2; // (2 * load_average)
 	num2 = add_fixed_from_integer(num1, 1); // (2 * load_average + 1)
+
 	return divide_fixed(num1, num2); // (2 * load_average) / (2 * load_average + 1)
 }
 
 /* 1초마다 recent_cpu를 새 값으로 업데이트 */
 void update_recent_cpu(){
-	// printf("들어옴\n");
-	struct thread *curr = thread_current();
-	real decay, calulated;
-	decay = get_decay();
+	struct thread *curr = thread_current(); // 현재 실행중인 쓰레드 curr
+
+	real decay, calulated; // 고정소수점실수형(int) 감쇠율 decay, 계산되는 값을 임시로 담을 calculated
+
+	decay = get_decay(); // decay값 계산
+
+	/* all_list를 순회하며 해당 쓰레드의 recent_cpu 업데이트 */
 	for(struct list_elem *e = list_begin(&all_list); e != list_end(&all_list); e = list_next(&curr->allelem)){
-		curr = list_entry(e, struct thread, allelem);
-		calulated = multiple_fixed(decay, curr->recent_cpu);
+		curr = list_entry(e, struct thread, allelem); // all_list에서 thread 조회
+		calulated = multiple_fixed(decay, curr->recent_cpu); // decay * recent_cpu
+		/* 
+		 * 수식: decay * recent_cpu * nice 
+		 * nice는 정수이기 때문에 고정 소수점 연산을 위해 nice * 2^14로 변환하고 계산
+		 */
 		calulated = add_fixed_from_integer(calulated, curr->nice);
-		curr->recent_cpu = calulated;
+
+		curr->recent_cpu = calulated; // recent_cpu 업데이트
 	}
-	// printf("%d %d %d\n", timer_ticks() ,thread_get_load_avg(),thread_get_recent_cpu());
 }
 
 /* 매 tick마다 recent_cpu를 1씩 증가 */
 void increase_recent_cpu() {
-	struct thread *curr;
+	struct thread *curr = thread_current();; // 현재 실행중인 쓰레드 curr
+
+	/* 
+	 * idle_thread는 ready 리스트가 비어있고 현재 진행 중인 쓰레드가 없을때 실행되는 쓰레드다
+	 * 그렇기 때문에 idle_thread의 우선순위는 항상 0이어야 하고 cpu를 얼마나 점유하든 recent_cpu를 증가 시켜선 안된다
+	 * 현재 실행중인 쓰레드가 idle_thread이면 함수를 실행시키지 않는다
+	 */
 	if(thread_current() == idle_thread)
 		return;
-	curr = thread_current();
-	enum intr_level old_level;
-	old_level = intr_disable();
-	curr->recent_cpu = add_one_fixed(curr->recent_cpu);
-	// printf("%s %d\n",curr->name, thread_current()->recent_cpu);
-	// printf("load_average:%d\n",load_average);
-	intr_set_level(old_level);
+
+	curr->recent_cpu = add_one_fixed(curr->recent_cpu); // 실행중인 쓰래드의 recent_cpu에 1을 더함
 }
 
 /* 4tick마다 모든 쓰레드의 우선순위 업데이트 */
 void update_priority(){
-	struct list_elem *e;
-	struct thread *curr;
-	int calulated;
-	// printf("%d\n",thread_current()->priority);
-	for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next (e)){
-		curr = list_entry(e, struct thread, allelem);
+	struct list_elem *e; // all_list를 순회할 elem
+	struct thread *curr; // all_list를 순회할 thread
+	int calulated; // 우선순위를 계산해 잠깐 담아둘 변수
+
+	for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next (e)){ // all_list 순회
+		curr = list_entry(e, struct thread, allelem); // all_list에서 쓰레드 조회
+
+		/* PRI_MAX -(recent_cpt/4) - (2*nice) */
 		calulated = PRI_MAX - fixed_to_nearest_integer((curr->recent_cpu / 4)) - (curr->nice * 2);
-		if (calulated > 63)
+
+		if (calulated > 63) //아주 만약에 우선순위가 63 보다 커지면 63으로 맞춰주기
 			calulated = PRI_MAX;
-		else if (calulated < PRI_MIN)
+		else if (calulated < PRI_MIN) // 아무 만약에 우선순위가 0보다 작아지면 0으로 맞춰주기
 			calulated = PRI_MIN;
-		curr->priority = calulated;
-		// printf("%s: nice:%d priorrity:%d , ",curr->name, curr->nice, curr->priority);
+
+		curr->priority = calulated; // all_list에서 조회한 쓰레드 우선순위 업데이트
 	}
-	// printf("\n");
 }
 
 /* 우선순위를 기부 */
 void donate_priority(struct thread *holder, struct thread *receiver) {
 	enum intr_level old_level;
+
 	if(holder->priority < receiver->priority)
 		holder->priority = receiver->priority; // lock을 가지는 쓰레드의 우선순위를 lock을 요청한 쓰레드의 우선순위로 업데이트
+
 	old_level = intr_disable();
 	list_push_front(&holder->donations, &receiver->d_elem); // lock을 가지고있는 holder의 도네이션 리스트에 락을 요청하는 reciver 삽입
 	donate_priority_nested(holder); // lock을 소유하는 holder에 우선순위 전파
@@ -554,7 +586,7 @@ void donate_priority_nested(struct thread *t) {
 	struct thread *holder, *curr = t; // lock을 소유하는 holder, 락의 홀더를 계속 탐색하며 앞으로 나아갈 curr
 	int depth = 0; // 업데이트한 깊이
 
-	// 기다리는 락이 있으면 탐색 기다리고 있는 락이 없으면 멈춤
+	/* 기다리는 락이 있으면 탐색 기다리고 있는 락이 없으면 멈춤  너무 깊어지면 안되니까 8depth까지만 업데이트*/
 	while (curr->wait_on_lock != NULL && depth < NESTING_DEPTH)
 	{
 		holder = curr->wait_on_lock->holder; // holder를 업데이트
@@ -563,10 +595,25 @@ void donate_priority_nested(struct thread *t) {
 		}
 		holder->priority = t->priority; // 홀더의 우선순위를 상속해주는 쓰레드의 우선순위로 업데이트
 		curr = holder; // curr를 초기화
-		depth++;
+		depth++; 
 	}
+}
 
-	donation_update_priority(curr); // 우선순위를 한번 업데이트
+/* 락을 얻은 쓰레드가 */
+void update_donations_list(struct list *waiters){
+	struct list_elem *e, *d_e; // waiters list를 순회할 elem과 d_elem
+	struct thread *curr; // 현재 실행중인 쓰레드 락을 가지고있는 쓰레드
+
+	if(list_empty(waiters)) // 대기중인 쓰레드가 없다면 return
+		return;
+	
+	curr = thread_current(); // 현재 실행중인 쓰레드 지정
+
+	/* waiter 리스트를 순회하며 curr쓰레드의 donations리스트에 d_elem 삽입 */
+	for (e = list_begin (waiters); e != list_end (waiters); e = list_next (e)){
+		d_e = &list_entry(e, struct thread, elem)->d_elem;
+		list_push_front(&curr->donations, d_e);
+	}
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -841,7 +888,7 @@ void thread_check_sleep_list(){
 	struct thread *t;
 	old_level = intr_disable();
 	int64_t ticks = timer_ticks();
-	// lock_acquire(&sleep_lock);
+	// lock_acquire(&sleep_lock); // 인터럽트 컨텍스트에는 락을 걸면 안됨
     while (!list_empty(&sleep_list)) { // 슬립 리스트에서 꺠울 쓰레드 탐색
         t = list_entry(list_front(&sleep_list), struct thread, elem); // 슬립 리스트 맨 앞 쓰레드 조회
         if (t->wakeup_tick > ticks) { // 쓰레드가 현재 글로벌 틱보다 크다면 탐색 종료

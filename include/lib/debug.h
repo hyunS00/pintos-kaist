@@ -31,7 +31,7 @@ void debug_backtrace (void);
 	if ((CONDITION)) { } else {                             \
 		PANIC ("assertion `%s' failed.", #CONDITION);   \
 	}
-#define NOT_REACHED() PANIC ("executed an unreachable statement");
+#define NOT_REACHED() PANIC ("executed an unreachable statement"); //실행되어서는 안 되는 문장이 실행되었음
 #else
 #define ASSERT(CONDITION) ((void) 0)
 #define NOT_REACHED() for (;;)
