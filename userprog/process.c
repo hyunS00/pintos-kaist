@@ -39,7 +39,7 @@ process_init (void) {
  * thread id, or TID_ERROR if the thread cannot be created.
  * Notice that THIS SHOULD BE CALLED ONCE. */
 tid_t
-process_create_initd (const char *file_name) {
+process_create_initd (const char *file_name) { // process_execute()
 	char *fn_copy;
 	tid_t tid;
 
@@ -161,7 +161,7 @@ error:
 /* Switch the current execution context to the f_name.
  * Returns -1 on fail. */
 int
-process_exec (void *f_name) {
+process_exec (void *f_name) { //precess_start
 	char *file_name = f_name;
 	bool success;
 
