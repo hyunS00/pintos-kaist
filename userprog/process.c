@@ -48,7 +48,7 @@ process_init (void) {
  * 이 함수는 한 번만 호출되어야 합니다.
 */
 tid_t
-process_create_initd (const char *file_name) {
+process_create_initd (const char *file_name) { // process_execute()
 	char *fn_copy;
 	tid_t tid;
 
@@ -197,7 +197,7 @@ error:
 /* 현재 실행 중인 컨텍스트를 f_name으로 전환합니다.
  * 실패 시 -1을 반환합니다. */
 int
-process_exec (void *f_name) {
+process_exec (void *f_name) { //precess_start
 	char *file_name = f_name;
 	bool success;
 

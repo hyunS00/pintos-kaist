@@ -1,3 +1,6 @@
+// 유저 프로세스가 특권 명령을 수행할 때 exception 혹은 fault로 커널에서 오류를 띄우는데, 이 파일은 exception 오류를 다루는 코드
+	// 현재 모든 exception은 메세지를 띄우고 프로세스를 종료시킨다.
+	// project2의 솔루션에선 page_fault()를 수정할 것이다. 
 #include "userprog/exception.h"
 #include <inttypes.h>
 #include <stdio.h>
@@ -116,6 +119,13 @@ kill (struct intr_frame *f) {
    can find more information about both of these in the
    description of "Interrupt 14--Page Fault Exception (#PF)" in
    [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
+/*페이지 폴트 핸들러. 이 코드는 가상 메모리를 구현하기 위해 채워야 하는 스켈레톤입니다. 
+프로젝트 2의 일부 솔루션은 이 코드를 수정해야 할 수도 있습니다.
+진입 시, 폴트가 발생한 주소는 CR2 (Control Register 2)에 있으며, 
+폴트에 대한 정보는 exception.h의 PF_* 매크로에 설명된 형식으로 F의 error_code 멤버에 있습니다. 
+여기에 있는 예제 코드는 그 정보를 파싱하는 방법을 보여줍니다. 
+이에 대한 더 많은 정보는 
+[IA32-v3a] 섹션 5.15 "Exception and Interrupt Reference"의 "Interrupt 14--Page Fault Exception (#PF)" 설명에서 찾을 수 있습니다.*/
 static void
 page_fault (struct intr_frame *f) {
 	bool not_present;  /* True: not-present page, false: writing r/o page. */
