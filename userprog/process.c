@@ -59,9 +59,9 @@ process_create_initd (const char *file_name) { // process_execute()
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 	char *save_ptr;
-	printf("file_name : %s\n", file_name);
+	// printf("file_name : %s\n", file_name);
 	strtok_r(file_name, " ", &save_ptr);
-	printf("file_name : %s\n", file_name);
+	// printf("file_name : %s\n", file_name);
 
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
@@ -210,6 +210,14 @@ process_exec (void *f_name) { //precess_start
 	 * it stores the execution information to the member. */
 	/* 스레드 구조체 내의 intr_frame을 사용할 수 없습니다.
 	 * 현재 스레드가 재스케줄링될 때, 실행 정보를 멤버에 저장하기 때문입니다. */
+	
+	/*인터럽트 프레임 선언 : 인터럽트 프레임은 인터럽트와 같은 어떤 요청이 들어오면 기존까지 실행 중이던
+	context(레지스터 포함)를 저장하기 위한 구조체 이다.*/
+	/*근데 why? 인자를 parsing 해서 명령어를 실행하는건데 왜 인터럽트가 나오지?
+	이는 현재 실행 중인 스레드의 context를 f_name에 해당하는 명령을 실행하기위해
+	context switching하는 것이 process_exec()의 역할이기 때문.
+	즉, 우리가 입력해주는 명령을 받기 직전에 어떤 스레드가 돌고 있었을 테니(그게 idle이던 실제로 실행 중이던)
+	process_exec()에 context switching 역할도 같이 넣어 주는것*/
 	struct intr_frame _if;
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
@@ -231,6 +239,11 @@ process_exec (void *f_name) { //precess_start
 
 	/* Start switched process. */
 	/* 전환된 프로세스를 시작합니다. */
+
+	// Project 2 : parsing argument 
+	// 터미널 띄우기 용 .feat 지훈
+	hex_dump(_if.rsp, _if.rsp, KERN_BASE - _if.rsp, true);
+
 	do_iret (&_if);
 	NOT_REACHED ();
 }
@@ -260,6 +273,11 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: 힌트) process_wait (initd)에서 pintos가 종료되는 경우,
 	 * XXX: process_wait을 구현하기 전에 여기에 무한 루프를 추가하는 것을
 	 * XXX: 권장합니다. */
+
+	while (child_tid);
+	{
+
+	}
 	return -1;
 }
 
@@ -406,6 +424,25 @@ load (const char *file_name, struct intr_frame *if_) {
 	bool success = false;
 	int i;
 
+	/*Project 2 : Command line parsing*/
+	char *arg_list[128];
+	char *token, *save_ptr;
+	int token_count = 0;
+	printf("%s \n",file_name);
+	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)){
+		arg_list[token_count++] = token;
+		printf("%s \n",arg_list[token_count-1]);
+	}
+	// while (token != NULL) {
+	// 	// printf("민사빈 : %s\n",token);
+	// 	token = strtok_r (NULL, " ", &save_ptr); // 
+		
+	// 	token_count++;
+	// }
+
+	/*Project 2 : Command line parsing*/
+
+
 	/* Allocate and activate page directory. */
 	/* 페이지 디렉토리를 할당하고 활성화합니다. */
 	t->pml4 = pml4_create ();
@@ -502,9 +539,13 @@ load (const char *file_name, struct intr_frame *if_) {
 	if_->rip = ehdr.e_entry;
 
 	/* TODO: Your code goes here.
-	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-	 /* TODO: 여기에 코드를 작성하세요. 
-	  * TODO: 인자 전달을 구현합니다 (project2/argument_passing.html 참조). */
+	   TODO: Implement argument passing (see project2/argument_passing.html). */
+	/* TODO: 여기에 코드를 작성하세요. 
+	   TODO: 인자 전달을 구현합니다 (project2/argument_passing.html 참조). */
+	/* Project 2 command_line_parsing*/
+	argument_stack(arg_list, token_count, if_);
+	/* Project 2 command_line_parsing*/
+	
 	success = true;
 
 done:
@@ -512,6 +553,46 @@ done:
 	/* 로드가 성공했든 실패했든 여기에 도착합니다. */
 	file_close (file);
 	return success;
+}
+
+void argument_stack(char *argv[], int argc, struct intr_frame *if_){
+	char arg_address[128];
+
+	// argv 실값 대입
+	for (int i = argc - 1; i >= 0; i--){		// index 맞춰주는 -1
+	printf("%s %d\n",argv[i], i);
+		size_t argv_len = strlen(argv[i]);
+
+		if_->rsp = if_->rsp - (argv_len + 1); 	// rsp를 argv_len만큼 내려주고 ('\0' 포함이기에 +1)
+		memcpy(if_->rsp, argv[i], argv_len + 1);// string + 1만큼 복사 ('\0'포함)
+		arg_address[i] = if_->rsp;				// 그 rsp 주소 저장
+	}
+
+	// 패딩 채워주기 8바이트 정렬 
+	while (if_->rsp % 8 != 0){
+		if_->rsp--;
+		*(uint8_t *) if_->rsp = 0;
+	}
+	
+	// argv 주소 넣기
+	for (int i = argc; i >= 0; i--){
+		// TODO 1. 처음엔 0 값 넣어주기
+		//		2. 주소 역순으로 삽입
+		// printf("민사빈 : %d", argc);
+		if_->rsp = if_->rsp - 8;							// 8byte 만큼 내리고
+		if (i == argc){										// 주소의 맨 위는 0
+			memset(if_->rsp, 0, sizeof(char **));			
+		} else{
+			memcpy(if_->rsp, &arg_address[i], sizeof(char **));// char 포인터 크기 8byte 만큼 채우
+		}
+	}
+
+	// 마지막엔 fake 주소 0값 넣어주기
+	if_->rsp = if_->rsp - 8;
+	memset(if_->rsp, 0, sizeof(void *)); //void 포인터도 8byte
+
+	if_->R.rdi  = argc;	// rdi에는 argc
+	if_->R.rsi = &argv;	// rsi에는 argv의 주소
 }
 
 
