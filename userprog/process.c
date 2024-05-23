@@ -22,10 +22,18 @@
 #include "vm/vm.h"
 #endif
 
+/* 정렬요건을 8로 설정 */
+#define ALIGNMENT 8
+
+/* 가장 가까운 정렬요건으로 올림한다 */
+#define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
+
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
+static void parsing_file_name(char *file_name, int *argc,char *argv[]);
+static void argument_passing_user_stack(int argc,char *argv[],struct intr_frame *if_);
 
 /* General process initializer for initd and other process. */
 /* 프로세스 초기화 함수는 새로운 프로세스를 생성하고 초기화하는 역할을 합니다.
@@ -58,10 +66,9 @@ process_create_initd (const char *file_name) { // process_execute()
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
+
 	char *save_ptr;
-	printf("file_name : %s\n", file_name);
 	strtok_r(file_name, " ", &save_ptr);
-	printf("file_name : %s\n", file_name);
 
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
@@ -231,6 +238,7 @@ process_exec (void *f_name) { //precess_start
 
 	/* Start switched process. */
 	/* 전환된 프로세스를 시작합니다. */
+	hex_dump(_if.rsp, _if.rsp, KERN_BASE - _if.rsp, true);
 	do_iret (&_if);
 	NOT_REACHED ();
 }
@@ -260,6 +268,7 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: 힌트) process_wait (initd)에서 pintos가 종료되는 경우,
 	 * XXX: process_wait을 구현하기 전에 여기에 무한 루프를 추가하는 것을
 	 * XXX: 권장합니다. */
+	while (child_tid);
 	return -1;
 }
 
@@ -413,6 +422,12 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	process_activate (thread_current ());
 
+	char *argv[128]; // 한페이지가 4KB 대충 이정도까지는 들어갈수 있는정도? 
+	int argc = 0; // 인자의 갯수
+
+	// file_name에서 인자들을 parsing
+	parsing_file_name(file_name, &argc, argv);
+
 	/* Open executable file. */
 	/* 실행 파일을 엽니다. */
 	file = filesys_open (file_name);
@@ -493,7 +508,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	}
 
 	/* Set up stack. */
-	/* 스택 설정 */
+	/* 사용자 스택 초기화 */
 	if (!setup_stack (if_))
 		goto done;
 
@@ -505,6 +520,8 @@ load (const char *file_name, struct intr_frame *if_) {
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 	 /* TODO: 여기에 코드를 작성하세요. 
 	  * TODO: 인자 전달을 구현합니다 (project2/argument_passing.html 참조). */
+	argument_passing_user_stack(argc, argv, if_);
+
 	success = true;
 
 done:
@@ -514,6 +531,55 @@ done:
 	return success;
 }
 
+void parsing_file_name(char *file_name, int *argc,char *argv[]) {
+	char *token, *save_ptr;
+
+	for(token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)){
+		argv[(*argc)++] = token;
+	}
+}
+
+void argument_passing_user_stack(int argc,char *argv[],struct intr_frame *if_){
+	uintptr_t push_rsp = 0; //유저스택에 push할때 사용하는 변수 rsp - push_rsp
+	size_t args_size = 0; // 인수들을 push하고 8바이트 정렬을할때 사용할 변수
+
+	/* argv[i][...] 
+	 * 인수들 자체(string)를 스택에 push */
+	for(int i = argc-1; i >= 0; i--){
+		size_t size = strlen(argv[i])+1; // 널종단자 "\0"를 포함한 인수의 사이즈 +1
+		push_rsp += size; // size 만큼 유저 스택에 push
+		args_size += size; // 정렬할 떄 사용할 args_size
+		/* argv[i]가 가리키는 주소에서 size만큼 유저스택 rsp - push_rsp위치에 push */
+		memcpy(if_->rsp - push_rsp, argv[i], size);
+		/* argv[i]의 포인터 값에 방금 유저 스택에 push한 값 시작주소로 초기화 */
+		argv[i] = (char *)(if_->rsp - push_rsp);
+	}
+
+	/* word-align 
+	 * arg_size를 8바이트 정렬을 해야함*/
+	push_rsp = ALIGN(args_size);
+	memset(if_->rsp - push_rsp, 0, (push_rsp - args_size)); // 8바이트 정렬을 위해 패딩(0)값을 넣음
+
+	/* argv[argc] 
+	 * argv[argc] 인수의 끝배열 주소에 0을 집어넣어서 배열을 끊음*/
+	push_rsp += 8; //포인터주소니까 8만큼 rsp를 땡김
+	memset(if_->rsp - push_rsp, 0, 8); // 주소값을 0으로 세팅
+
+	/* argv[i] 
+	 * argv[i]의 주소를 유저스택에 push*/
+	for(int i = 0 ;i < argc; i++){
+		push_rsp += 8; // 주소니까 8바이트
+		memcpy(if_->rsp - push_rsp, &argv[i], 8); //유저스택에 argv[i]의 각 인수들의 시작 주소값을 넣음
+	}
+	/* return 주소를 집어넣음 */
+	push_rsp += 8; // 주소니까 8바이트
+	memset(if_->rsp - push_rsp, 0, 8); //처믐 실행시키는 거니까 일단 fake주소 0
+
+	if_->rsp -= push_rsp; // 유저모드로 전환될떄 레지스터값을 복원할때 사용할 인터럽트프레임의 rsp의 값을 업데이트
+	if_->R.rdi = argc; // 첫번째 인자 레지스터 rdi에 argc값 저장
+	if_->R.rsi = &argv; // 두번째 인자 레지스터 rsi에 argv값 저장
+	return;
+}
 
 /* Checks whether PHDR describes a valid, loadable segment in
  * FILE and returns true if so, false otherwise. */
