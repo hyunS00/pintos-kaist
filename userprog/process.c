@@ -422,8 +422,8 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	process_activate (thread_current ());
 
-	char *argv[128]; //
-	int argc = 0;
+	char *argv[128]; // 한페이지가 4KB 대충 이정도까지는 들어갈수 있는정도? 
+	int argc = 0; // 인자의 갯수
 
 	// file_name에서 인자들을 parsing
 	parsing_file_name(file_name, &argc, argv);
