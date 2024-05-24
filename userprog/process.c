@@ -217,6 +217,14 @@ process_exec (void *f_name) { //precess_start
 	 * it stores the execution information to the member. */
 	/* 스레드 구조체 내의 intr_frame을 사용할 수 없습니다.
 	 * 현재 스레드가 재스케줄링될 때, 실행 정보를 멤버에 저장하기 때문입니다. */
+	
+	/*인터럽트 프레임 선언 : 인터럽트 프레임은 인터럽트와 같은 어떤 요청이 들어오면 기존까지 실행 중이던
+	context(레지스터 포함)를 저장하기 위한 구조체 이다.*/
+	/*근데 why? 인자를 parsing 해서 명령어를 실행하는건데 왜 인터럽트가 나오지?
+	이는 현재 실행 중인 스레드의 context를 f_name에 해당하는 명령을 실행하기위해
+	context switching하는 것이 process_exec()의 역할이기 때문.
+	즉, 우리가 입력해주는 명령을 받기 직전에 어떤 스레드가 돌고 있었을 테니(그게 idle이던 실제로 실행 중이던)
+	process_exec()에 context switching 역할도 같이 넣어 주는것*/
 	struct intr_frame _if;
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
@@ -239,6 +247,7 @@ process_exec (void *f_name) { //precess_start
 	/* Start switched process. */
 	/* 전환된 프로세스를 시작합니다. */
 	hex_dump(_if.rsp, _if.rsp, KERN_BASE - _if.rsp, true);
+
 	do_iret (&_if);
 	NOT_REACHED ();
 }
@@ -269,6 +278,7 @@ process_wait (tid_t child_tid UNUSED) {
 	 * XXX: process_wait을 구현하기 전에 여기에 무한 루프를 추가하는 것을
 	 * XXX: 권장합니다. */
 	while (child_tid);
+
 	return -1;
 }
 
@@ -284,6 +294,7 @@ process_exit (void) {
 	/* TODO: 여기에 코드를 작성하세요.
 	 * TODO: 프로세스 종료 메시지를 구현합니다 (project2/process_termination.html 참조).
 	 * TODO: 여기에 프로세스 자원 정리를 구현하는 것을 권장합니다. */
+	printf("%s : exit(%d)\n", curr->name, curr->exit_status);
 	process_cleanup ();
 }
 
@@ -415,6 +426,24 @@ load (const char *file_name, struct intr_frame *if_) {
 	bool success = false;
 	int i;
 
+	/*Project 2 : Command line parsing*/
+	char *arg_list[128];
+	char *token, *save_ptr;
+	int token_count = 0;
+	printf("%s \n",file_name);
+	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)){
+		arg_list[token_count++] = token;
+	}
+	// while (token != NULL) {
+	// 	// printf("민사빈 : %s\n",token);
+	// 	token = strtok_r (NULL, " ", &save_ptr); // 
+		
+	// 	token_count++;
+	// }
+
+	/*Project 2 : Command line parsing*/
+
+
 	/* Allocate and activate page directory. */
 	/* 페이지 디렉토리를 할당하고 활성화합니다. */
 	t->pml4 = pml4_create ();
@@ -517,9 +546,10 @@ load (const char *file_name, struct intr_frame *if_) {
 	if_->rip = ehdr.e_entry;
 
 	/* TODO: Your code goes here.
+	   TODO: Implement argument passing (see project2/argument_passing.html). */
+	/* TODO: 여기에 코드를 작성하세요. 
+	   TODO: 인자 전달을 구현합니다 (project2/argument_passing.html 참조).
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-	 /* TODO: 여기에 코드를 작성하세요. 
-	  * TODO: 인자 전달을 구현합니다 (project2/argument_passing.html 참조). */
 	argument_passing_user_stack(argc, argv, if_);
 
 	success = true;
