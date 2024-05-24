@@ -1,4 +1,3 @@
-// 시스템 콜 핸들러에 들어가는 어셈블리 코드 (이 코드를 이해할 필요는 없다)
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
@@ -9,9 +8,11 @@
 #include "threads/flags.h"
 #include "intrinsic.h"
 
+
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 void check_address (void *addr);
+int sys_write(int fd, const void *buffer, unsigned size);
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -49,10 +50,11 @@ syscall_init (void) {
 void
 syscall_handler (struct intr_frame *f UNUSED) {
 	int sys_number = f->R.rax;
-	// switch (sys_number)
-	// {
-	// case SYS_HALT: 							// 운영체제 종료
-	// 	halt();
+	switch (sys_number)
+	{
+	case SYS_HALT: 							// 운영체제 종료
+		sys_halt();
+		break;
 	// case SYS_EXIT:							// 프로그램 종료 후 상태 반환
 	// 	exit(f->R.rdi);
 	// case SYS_FORK:							// 자식 프로세스 생성
@@ -61,8 +63,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	// 	exec(f->R.rdi);
 	// case SYS_WAIT:							// 자식 프로세스가 종료될 때까지 기다림
 	// 	wait(f->R.rdi);		
-	// case SYS_CREATE:						// 새 파일 생성
-	// 	create(f->R.rdi, f->R.rsi); 		
+	// case SYS_CREATE:
+    //     create(f->R.rdi, f->R.rsi);
 	// case SYS_REMOVE:						// 파일 삭제
 	// 	remove(f->R.rdi);
 	// case SYS_OPEN:							// 파일 열기
@@ -71,41 +73,52 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	// 	filesize(f->R.rdi);
 	// case SYS_READ:							// 파일에서 데이터 읽기
 	// 	read(f->R.rdi, f->R.rsi, f->R.rdx);
-	// case SYS_WRITE:							// 파일에 데이터 쓰기
-	// 	write(f->R.rdi, f->R.rsi, f->R.rdx);
+	case SYS_WRITE:							// 파일에 데이터 쓰기
+		sys_write(f->R.rdi, f->R.rsi, f->R.rdx);
+		break;
 	// case SYS_SEEK:							// 파일의 읽기/쓰기 포인터 이동
 	// 	seek(f->R.rdi, f->R.rsi);
 	// case SYS_TELL:							// 파일의 현재 읽기/쓰기 데이터 반환
 	// 	tell(f->R.rdi);
 	// case SYS_CLOSE:							// 파일 닫기
 	// 	close(f->R.rdi);
-	// }
+	}
 	printf ("system call!\n");
-	thread_exit ();
+	// thread_exit ();
 }
 
-// /*User memory access는 이후 시스템 콜 구현할 때 메모리에 접근할 텐데, 
-// 이때 접근하는 메모리 주소가 유저 영역인지 커널 영역인지를 체크*/
-// void check_address (void *addr){
-// 	struct thread *t = thread_current();
-// 	if (!is_user_vaddr(addr) == NULL || pml4_get_page(t->pml4, addr)){ 	// 포인터가 가리키는 주소가 유저영역의 주소인지 확인 || 포인터가 가리키는 주소가 유저 영역 내에 있지만 페이자로 할당하지 않은 영역일수도 잇으니 체크
-// 	exit(-1);															// 잘못된 접근일 경우 프로세스 종
-// 	}
-// }
+/*User memory access는 이후 시스템 콜 구현할 때 메모리에 접근할 텐데, 
+이때 접근하는 메모리 주소가 유저 영역인지 커널 영역인지를 체크*/
+void check_address (void *addr){
+	struct thread *t = thread_current();
+	if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4, addr) == NULL){ 	// 포인터가 가리키는 주소가 유저영역의 주소인지 확인 || 포인터가 가리키는 주소가 유저 영역 내에 있지만 페이자로 할당하지 않은 영역일수도 잇으니 체크
+	exit(-1);															// 잘못된 접근일 경우 프로세스 종
+	}
+}
 
-// /* pintos 종료시키는 함수 */
-// void halt(void){
-// 	power_off();
-// }
+/* pintos 종료시키는 함수 */
+void sys_halt(void){
+	power_off();
+	// filesys_done();
+	// printf("종료함둥");
+}
 
-// /* 현재 프로세스를 종료시키는 시스템 콜 */
-// void exit(int status){
-// 	struct thread *t = thread_current();
-// 	printf("%s : exit%d\n", t->name, t->status);
-// 	thread_exit();
-// }
+/* 현재 프로세스를 종료시키는 시스템 콜 */
+void exit(int status){
+	struct thread *t = thread_current();
+	printf("%s : exit %d\n", t->name, status);
+	thread_exit();
+}
 
-// /* 파일 생성하는 시스템 콜 */
+int sys_write(int fd, const void *buffer, unsigned size){
+	if (fd == 1)
+		putbuf(buffer, size);
+	else
+		return -1;
+	return size;
+}
+
+// // /* 파일 생성하는 시스템 콜 */
 // bool create (const char *file, unsigned initial_size) {
 // 	/* 성공이면 true, 실패면 false */
 // 	check_address(file);

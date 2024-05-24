@@ -242,7 +242,7 @@ process_exec (void *f_name) { //precess_start
 
 	// Project 2 : parsing argument 
 	// 터미널 띄우기 용 .feat 지훈
-	hex_dump(_if.rsp, _if.rsp, KERN_BASE - _if.rsp, true);
+	// hex_dump(_if.rsp, _if.rsp, KERN_BASE - _if.rsp, true);
 
 	do_iret (&_if);
 	NOT_REACHED ();
@@ -293,6 +293,7 @@ process_exit (void) {
 	/* TODO: 여기에 코드를 작성하세요.
 	 * TODO: 프로세스 종료 메시지를 구현합니다 (project2/process_termination.html 참조).
 	 * TODO: 여기에 프로세스 자원 정리를 구현하는 것을 권장합니다. */
+	printf("%s : exit(%d)\n", curr->name, curr->exit_status);
 	process_cleanup ();
 }
 
@@ -431,7 +432,6 @@ load (const char *file_name, struct intr_frame *if_) {
 	printf("%s \n",file_name);
 	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)){
 		arg_list[token_count++] = token;
-		printf("%s \n",arg_list[token_count-1]);
 	}
 	// while (token != NULL) {
 	// 	// printf("민사빈 : %s\n",token);
@@ -556,15 +556,29 @@ done:
 }
 
 void argument_stack(char *argv[], int argc, struct intr_frame *if_){
-	char arg_address[128];
-
+	char *arg_address[128];
+	// int *p;
+	// void **q;
+    // int a = 2;
+    // int b = 8;
+ 
+    // p = &a;
+ 
+    // printf("민사빈 : %p\n", p);   // * 안 썼을 때
+    // printf("민사빈 : %d\n", *p);   // * 썼을 때
+ 
+    // q = &b;
+ 
+    // printf("민사빈 : %p\n", q);   // * 안 썼을 때
+    // printf("민사빈 : %d\n", *q);
 	// argv 실값 대입
 	for (int i = argc - 1; i >= 0; i--){		// index 맞춰주는 -1
-	printf("%s %d\n",argv[i], i);
+		
+		// printf("%s %d\n",argv[i], i);
 		size_t argv_len = strlen(argv[i]);
 
 		if_->rsp = if_->rsp - (argv_len + 1); 	// rsp를 argv_len만큼 내려주고 ('\0' 포함이기에 +1)
-		memcpy(if_->rsp, argv[i], argv_len + 1);// string + 1만큼 복사 ('\0'포함)
+		memcpy((void *)if_->rsp, argv[i], argv_len + 1);// string + 1만큼 복사 ('\0'포함)
 		arg_address[i] = if_->rsp;				// 그 rsp 주소 저장
 	}
 
@@ -592,7 +606,7 @@ void argument_stack(char *argv[], int argc, struct intr_frame *if_){
 	memset(if_->rsp, 0, sizeof(void *)); //void 포인터도 8byte
 
 	if_->R.rdi  = argc;	// rdi에는 argc
-	if_->R.rsi = &argv;	// rsi에는 argv의 주소
+	if_->R.rsi = if_->rsp + 8;	// rsi에는 argv의 주소
 }
 
 
