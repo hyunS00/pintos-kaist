@@ -246,7 +246,7 @@ process_exec (void *f_name) { //precess_start
 
 	/* Start switched process. */
 	/* 전환된 프로세스를 시작합니다. */
-	hex_dump(_if.rsp, _if.rsp, KERN_BASE - _if.rsp, true);
+	hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 
 	do_iret (&_if);
 	NOT_REACHED ();
@@ -294,7 +294,6 @@ process_exit (void) {
 	/* TODO: 여기에 코드를 작성하세요.
 	 * TODO: 프로세스 종료 메시지를 구현합니다 (project2/process_termination.html 참조).
 	 * TODO: 여기에 프로세스 자원 정리를 구현하는 것을 권장합니다. */
-	printf("%s : exit(%d)\n", curr->name, curr->exit_status);
 	process_cleanup ();
 }
 
@@ -607,7 +606,7 @@ void argument_passing_user_stack(int argc,char *argv[],struct intr_frame *if_){
 
 	if_->rsp -= push_rsp; // 유저모드로 전환될떄 레지스터값을 복원할때 사용할 인터럽트프레임의 rsp의 값을 업데이트
 	if_->R.rdi = argc; // 첫번째 인자 레지스터 rdi에 argc값 저장
-	if_->R.rsi = &argv; // 두번째 인자 레지스터 rsi에 argv값 저장
+	if_->R.rsi = if_->rsp+8; // 두번째 인자 레지스터 rsi에 argv값 저장
 	return;
 }
 
