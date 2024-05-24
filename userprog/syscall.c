@@ -12,6 +12,7 @@
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 void check_address (void *addr);
+
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -49,12 +50,15 @@ syscall_init (void) {
 void
 syscall_handler (struct intr_frame *f UNUSED) {
 	int sys_number = f->R.rax;
-	// switch (sys_number)
-	// {
-	// case SYS_HALT: 							// 운영체제 종료
-	// 	halt();
-	// case SYS_EXIT:							// 프로그램 종료 후 상태 반환
-	// 	exit(f->R.rdi);
+
+	printf("sys_num:%ld\n", sys_number);
+	switch (sys_number)
+	{
+	case SYS_HALT: 							// 운영체제 종료
+		halt();
+		break;
+	case SYS_EXIT:							// 프로그램 종료 후 상태 반환
+		exit(f->R.rdi);
 	// case SYS_FORK:							// 자식 프로세스 생성
 	// 	fork(f->R.rdi);
 	// case SYS_EXEC:							// 새 프로그램 실행
@@ -71,17 +75,19 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	// 	filesize(f->R.rdi);
 	// case SYS_READ:							// 파일에서 데이터 읽기
 	// 	read(f->R.rdi, f->R.rsi, f->R.rdx);
-	// case SYS_WRITE:							// 파일에 데이터 쓰기
-	// 	write(f->R.rdi, f->R.rsi, f->R.rdx);
+	case SYS_WRITE:							// 파일에 데이터 쓰기
+		write(f->R.rdi, f->R.rsi, f->R.rdx);
 	// case SYS_SEEK:							// 파일의 읽기/쓰기 포인터 이동
 	// 	seek(f->R.rdi, f->R.rsi);
 	// case SYS_TELL:							// 파일의 현재 읽기/쓰기 데이터 반환
 	// 	tell(f->R.rdi);
 	// case SYS_CLOSE:							// 파일 닫기
 	// 	close(f->R.rdi);
-	// }
+	}
 	printf ("system call!\n");
-	thread_exit ();
+	// struct thread *t = thread_current();
+	// printf("thread name:%s\n",t->name);
+	// thread_exit ();
 }
 
 // /*User memory access는 이후 시스템 콜 구현할 때 메모리에 접근할 텐데, 
@@ -93,17 +99,26 @@ syscall_handler (struct intr_frame *f UNUSED) {
 // 	}
 // }
 
-// /* pintos 종료시키는 함수 */
-// void halt(void){
-// 	power_off();
-// }
+/* pintos 종료시키는 함수 */
+void halt(void){
+	// printf("halt 실행됐고 pintos 종료\n");
+	// filesys_done();
+	power_off();
+}
 
-// /* 현재 프로세스를 종료시키는 시스템 콜 */
-// void exit(int status){
-// 	struct thread *t = thread_current();
-// 	printf("%s : exit%d\n", t->name, t->status);
-// 	thread_exit();
-// }
+/* 현재 프로세스를 종료시키는 시스템 콜 */
+void exit(int status){
+	struct thread *t = thread_current();
+	t->exit_status = status;
+	thread_exit();
+}
+
+int write(int fd, const void *buffer, unsigned size)
+{
+	if (fd == 1)
+		putbuf(buffer, size);
+	return size;
+}
 
 // /* 파일 생성하는 시스템 콜 */
 // bool create (const char *file, unsigned initial_size) {
