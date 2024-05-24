@@ -3,6 +3,8 @@
     "thread.h": "c",
     "interrupt.h": "c",
     "stdint.h": "c",
-    "stdio.h": "c"
+    "stdio.h": "c",
+    "intrinsic.h": "c",
+    "*.inc": "c"
   }
 }
