@@ -144,7 +144,7 @@ bool create (const char *file, unsigned initial_size) {
 int open (const char *file) {
 	struct thread *curr = thread_current();
 	check_address(file);
-	
+
 	struct file *open_file = filesys_open(file);
 	int fd = -1;
 
@@ -181,7 +181,7 @@ get_file(int fd){
 int read (int fd, void *buffer, unsigned length){
 	check_address(buffer);
 	if(fd == 0){
-		input_getc()
+		input_getc();
 	}
 
 	struct file *file = get_file(fd);
