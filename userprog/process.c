@@ -523,48 +523,9 @@ load (const char *file_name, struct intr_frame *if_) {
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 	 /* TODO: 여기에 코드를 작성하세요. 
 	  * TODO: 인자 전달을 구현합니다 (project2/argument_passing.html 참조). */
-	
-	//1. 인자 <== 방향으로 넣기
-	for(int i = argc - 1; i >= 0; i--)
-	{
-		size_t len = strlen(argv[i]) + 1;
-		if_->rsp -= len;
-		memcpy((void *)if_->rsp, argv[i], len);
-		argv[i] = if_->rsp;
-	}
-	
-	//2. 만약 rsp포인터가 8의 배수가 아니면
-	//남은 간격은 0으로 넣기 자료형은 int8_t == 1byte
-	if(if_->rsp % 8 != 0)
-	{
-		for(int i = 0; i < ALIGN(if_->rsp) - if_->rsp; i++)
-		{
-			if_->rsp--;
-			*(int8_t *)if_->rsp = 0;
-		}
-	}
-
-	//3. NULL넣기
-	if_->rsp -= sizeof(char *);
-	*(char **)if_->rsp = NULL;
-
-	//4. &argv[0], &argv[1], ... char배열 포인터 넣기
-	for(int i = argc - 1; i >= 0; i--)
-	{
-		if_->rsp -= sizeof(char *);
-		*(char **)if_->rsp = argv[i];
-	}
-
-	// 레지스터 설정
-    if_->R.rdi = argc;  // argc
-    if_->R.rsi = if_->rsp; // argv
-
-	//5. fake address 넣기
-	if_->rsp -= sizeof(void *);
-	*(void **)if_->rsp = NULL;
+	argument_passing_user_stack(argc, argv, if_);
 
 	success = true;
-
 done:
 	/* We arrive here whether the load is successful or not. */
 	/* 로드가 성공했든 실패했든 여기에 도착합니다. */
