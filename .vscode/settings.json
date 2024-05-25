@@ -5,6 +5,8 @@
     "stdint.h": "c",
     "stdio.h": "c",
     "intrinsic.h": "c",
-    "*.inc": "c"
+    "*.inc": "c",
+    "syscall.h": "c",
+    "syscall-nr.h": "c"
   }
 }
