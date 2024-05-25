@@ -684,6 +684,8 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->recent_cpu = 0; //최근에 cpu를 얼마나 사용했는지 나타내는 변수 초기화
 	t->nice = 0; // 다른쓰레드들에게 얼마나 양보를 해주는지 나타내는 변수 nice 초기화
 	t->exit_status = 1;
+	
+    t->fd = 2;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
