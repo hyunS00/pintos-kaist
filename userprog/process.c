@@ -41,6 +41,7 @@ static void argument_passing_user_stack(int argc,char *argv[],struct intr_frame 
 static void
 process_init (void) {
 	struct thread *current = thread_current ();
+	current->fd_table = palloc_get_multiple(PAL_USER | PAL_ZERO, INT8_MAX);
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -246,7 +247,7 @@ process_exec (void *f_name) { //precess_start
 
 	/* Start switched process. */
 	/* 전환된 프로세스를 시작합니다. */
-	hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
+	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 
 	do_iret (&_if);
 	NOT_REACHED ();
@@ -277,7 +278,7 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: 힌트) process_wait (initd)에서 pintos가 종료되는 경우,
 	 * XXX: process_wait을 구현하기 전에 여기에 무한 루프를 추가하는 것을
 	 * XXX: 권장합니다. */
-	while (child_tid);
+	for(int i = 0; i<500000000; i++);
 
 	return -1;
 }
@@ -294,6 +295,8 @@ process_exit (void) {
 	/* TODO: 여기에 코드를 작성하세요.
 	 * TODO: 프로세스 종료 메시지를 구현합니다 (project2/process_termination.html 참조).
 	 * TODO: 여기에 프로세스 자원 정리를 구현하는 것을 권장합니다. */
+	if(curr->exit_status != 1)
+		printf ("%s: exit(%d)\n", curr->name, curr->exit_status);
 	process_cleanup ();
 }
 
@@ -425,22 +428,6 @@ load (const char *file_name, struct intr_frame *if_) {
 	bool success = false;
 	int i;
 
-	/*Project 2 : Command line parsing*/
-	char *arg_list[128];
-	char *token, *save_ptr;
-	int token_count = 0;
-	printf("%s \n",file_name);
-	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)){
-		arg_list[token_count++] = token;
-	}
-	// while (token != NULL) {
-	// 	// printf("민사빈 : %s\n",token);
-	// 	token = strtok_r (NULL, " ", &save_ptr); // 
-		
-	// 	token_count++;
-	// }
-
-	/*Project 2 : Command line parsing*/
 
 
 	/* Allocate and activate page directory. */
@@ -453,6 +440,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	char *argv[128]; // 한페이지가 4KB 대충 이정도까지는 들어갈수 있는정도? 
 	int argc = 0; // 인자의 갯수
 
+	/*Project 2 : Command line parsing*/
 	// file_name에서 인자들을 parsing
 	parsing_file_name(file_name, &argc, argv);
 
@@ -528,6 +516,7 @@ load (const char *file_name, struct intr_frame *if_) {
 					if (!load_segment (file, file_page, (void *) mem_page,
 								read_bytes, zero_bytes, writable))
 						goto done;
+					thread_current()->executable = file;
 				}
 				else
 					goto done;
@@ -596,7 +585,7 @@ void argument_passing_user_stack(int argc,char *argv[],struct intr_frame *if_){
 
 	/* argv[i] 
 	 * argv[i]의 주소를 유저스택에 push*/
-	for(int i = 0 ;i < argc; i++){
+	for(int i = argc-1; i >= 0; i--){
 		push_rsp += 8; // 주소니까 8바이트
 		memcpy(if_->rsp - push_rsp, &argv[i], 8); //유저스택에 argv[i]의 각 인수들의 시작 주소값을 넣음
 	}

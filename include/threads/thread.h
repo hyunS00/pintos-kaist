@@ -120,6 +120,8 @@ struct thread {
 	int nice; // 다른 쓰레드들에게 얼마나 양보를 해주는지 나타내는 변수 -20 ~ 20 을 가짐 음수이면 우선순위가 높아짐 양수이면 우선순위가 낮아짐
 	real recent_cpu; // 이 쓰레드가 최근에 cpu를 얼마나 사용했는지 나타내는 변수 현재 쓰레드가 많이 running할 수록 값이 낮아짐
 	int exit_status;
+	struct file **fd_table;             /* 파일 디스크립터 테이블 */
+    struct file *executable;            /* 실행 중인 파일 */
 };
 
 /* If false (default), use round-robin scheduler.
