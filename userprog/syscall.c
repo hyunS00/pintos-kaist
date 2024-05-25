@@ -175,7 +175,7 @@ bool create (const char *file, unsigned initial_size) {
 	
 	bool success;
 	/* 성공이면 true, 실패면 false */
-	if (file == NULL || initial_size <= 0) {
+	if (file == NULL || initial_size < 0) {
 		return 0;
 	}
 
