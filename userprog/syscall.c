@@ -7,11 +7,15 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
-
+#include "lib/user/syscall.h"
+#include "filesys/filesys.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 void check_address (void *addr);
+struct file *get_file_from_fd (int fd);
+bool sys_create(const char *file, unsigned initial_size);
+bool sys_remove (const char *file);
 
 /* System call.
  *
@@ -51,7 +55,6 @@ void
 syscall_handler (struct intr_frame *f UNUSED) {
 	int sys_number = f->R.rax;
 
-	printf("sys_num:%ld\n", sys_number);
 	switch (sys_number)
 	{
 	case SYS_HALT: 							// 운영체제 종료
@@ -59,32 +62,42 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	case SYS_EXIT:							// 프로그램 종료 후 상태 반환
 		exit(f->R.rdi);
-	// case SYS_FORK:							// 자식 프로세스 생성
+		break;
+	// 	break;
+	// // case SYS_FORK:							// 자식 프로세스 생성
 	// 	fork(f->R.rdi);
 	// case SYS_EXEC:							// 새 프로그램 실행
 	// 	exec(f->R.rdi);
 	// case SYS_WAIT:							// 자식 프로세스가 종료될 때까지 기다림
 	// 	wait(f->R.rdi);		
-	// case SYS_CREATE:
-    //     create(f->R.rdi, f->R.rsi);
-	// case SYS_REMOVE:						// 파일 삭제
-	// 	remove(f->R.rdi);
-	// case SYS_OPEN:							// 파일 열기
-	// 	open(f->R.rdi);
+	case SYS_CREATE:
+        f->R.rax = create(f->R.rdi, f->R.rsi);
+		break;
+	case SYS_REMOVE:						// 파일 삭제
+		f->R.rax = remove(f->R.rdi);
+		break;
+	case SYS_OPEN:							// 파일 열기
+		f->R.rax = open(f->R.rdi);
+		break;
 	// case SYS_FILESIZE:						// 파일 사이즈 반환
 	// 	filesize(f->R.rdi);
-	// case SYS_READ:							// 파일에서 데이터 읽기
-	// 	read(f->R.rdi, f->R.rsi, f->R.rdx);
+	case SYS_READ:							// 파일에서 데이터 읽기
+		f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
+		break;
 	case SYS_WRITE:							// 파일에 데이터 쓰기
-		write(f->R.rdi, f->R.rsi, f->R.rdx);
+		f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
+		break;
 	// case SYS_SEEK:							// 파일의 읽기/쓰기 포인터 이동
 	// 	seek(f->R.rdi, f->R.rsi);
 	// case SYS_TELL:							// 파일의 현재 읽기/쓰기 데이터 반환
 	// 	tell(f->R.rdi);
-	// case SYS_CLOSE:							// 파일 닫기
-	// 	close(f->R.rdi);
+	case SYS_CLOSE:							// 파일 닫기
+		close(f->R.rdi);
+		break;
+	default:
+		thread_exit ();
 	}
-	printf ("system call!\n");
+	// printf ("system call!\n");
 	// struct thread *t = thread_current();
 	// printf("thread name:%s\n",t->name);
 	// thread_exit ();
@@ -94,8 +107,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
 이때 접근하는 메모리 주소가 유저 영역인지 커널 영역인지를 체크*/
 void check_address (void *addr){
 	struct thread *t = thread_current();
-	if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4, addr) == NULL){ 	// 포인터가 가리키는 주소가 유저영역의 주소인지 확인 || 포인터가 가리키는 주소가 유저 영역 내에 있지만 페이자로 할당하지 않은 영역일수도 잇으니 체크
-	exit(-1);															// 잘못된 접근일 경우 프로세스 종
+	
+	/*포인터가 가리키는 주소가 유저영역의 주소인지 확인 
+	|| 포인터가 가리키는 주소가 유저 영역 내에 있지만 
+	페이지로 할당하지 않은 영역일수도 잇으니 체크*/
+	if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4, addr) == NULL){ 	
+		exit(-1);	// 잘못된 접근일 경우 프로세스 종료
 	}
 }
 
@@ -113,33 +130,106 @@ void exit(int status){
 	thread_exit();
 }
 
+struct file*
+get_file(int fd){
+	if(fd < 2 || fd >= INT8_MAX)
+		return NULL;
+
+	struct thread *curr = thread_current();
+	return curr->fd_table[fd];
+}
+
 int write(int fd, const void *buffer, unsigned size)
 {
-	if (fd == 1)
+	check_address(buffer);
+	if(fd == 0) return -1;
+	else if (fd == 1)
+	{
 		putbuf(buffer, size);
-	return size;
+		return size;
+	}
+	else
+	{
+		struct file *f = get_file(fd);
+
+		if(f == NULL)
+			return -1;
+		int byte_written = file_write(f, buffer, size);
+		return byte_written;
+	}
+	return -1;
+}
+
+
+/*파일을 제거하는 함수, 
+이 때 파일을 제거하더라도 그 이전에 파일을 오픈했다면 
+해당 오픈 파일은 close 되지 않고 그대로 켜진 상태로 남아있는다.*/
+bool remove (const char *file) {
+	check_address(file);
+	return filesys_remove(file);
 }
 
 // // /* 파일 생성하는 시스템 콜 */
-// bool create (const char *file, unsigned initial_size) {
-// 	/* 성공이면 true, 실패면 false */
-// 	check_address(file);
-// 	if (filesys_create(file, initial_size)) {
-// 		return true;
-// 	}
-// 	else {
-// 		return false;
-// 	}
-// }
+bool create (const char *file, unsigned initial_size) {
+	check_address(file);
+	
+	bool success;
+	/* 성공이면 true, 실패면 false */
+	if (file == NULL || initial_size <= 0) {
+		return 0;
+	}
 
-// /*파일을 제거하는 함수, 
-// 이 때 파일을 제거하더라도 그 이전에 파일을 오픈했다면 
-// 해당 오픈 파일은 close 되지 않고 그대로 켜진 상태로 남아있는다.*/
-// bool remove (const char *file) {
-// 	check_address(file);
-// 	if (filesys_remove(file)) {
-// 		return true;
-// 	} else {
-// 		return false;
-// 	}
-// }
+	success = filesys_create(file, initial_size);
+	return success;
+}
+
+/* open 시스템콜 */
+int open (const char *file) {
+	struct thread *curr = thread_current();
+	check_address(file);
+
+	struct file *open_file = filesys_open(file);
+	int fd = -1;
+
+	if(open_file == NULL){
+		return -1;
+	}
+
+	for(int i = 2; i < INT8_MAX; i++){
+		if(curr->fd_table[i] == NULL){
+			fd = i;
+			break;
+		}
+	}
+
+	if(fd != -1)
+		curr->fd_table[fd] = open_file;
+
+	return fd;
+}
+
+int read (int fd, void *buffer, unsigned length){
+	check_address(buffer);
+	if(fd == 0){
+		input_getc();
+	}
+
+	struct file *file = get_file(fd);
+
+}
+
+void remove_fd(int fd) {
+	struct thread *t = thread_current();
+	if(fd < 2 || fd >= INT8_MAX)
+		return t->fd_table[fd] = NULL;
+}
+
+void close(int fd)
+{
+	struct file *f = get_file(fd);
+	if(f != NULL)
+	{
+		file_close(f);
+		remove_fd(fd);
+	}
+}

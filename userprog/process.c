@@ -22,18 +22,13 @@
 #include "vm/vm.h"
 #endif
 
-/* 정렬요건을 8로 설정 */
 #define ALIGNMENT 8
-
-/* 가장 가까운 정렬요건으로 올림한다 */
-#define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
+#define ALIGN(size) (((size) + (ALIGNMENT - 1)) & ~0x7)
 
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
-static void parsing_file_name(char *file_name, int *argc,char *argv[]);
-static void argument_passing_user_stack(int argc,char *argv[],struct intr_frame *if_);
 
 /* General process initializer for initd and other process. */
 /* 프로세스 초기화 함수는 새로운 프로세스를 생성하고 초기화하는 역할을 합니다.
@@ -41,6 +36,7 @@ static void argument_passing_user_stack(int argc,char *argv[],struct intr_frame 
 static void
 process_init (void) {
 	struct thread *current = thread_current ();
+	current->fd_table = palloc_get_multiple(PAL_USER | PAL_ZERO, INT8_MAX);
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -56,7 +52,7 @@ process_init (void) {
  * 이 함수는 한 번만 호출되어야 합니다.
 */
 tid_t
-process_create_initd (const char *file_name) { // process_execute()
+process_create_initd (const char *file_name) {
 	char *fn_copy;
 	tid_t tid;
 
@@ -66,10 +62,8 @@ process_create_initd (const char *file_name) { // process_execute()
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
-
 	char *save_ptr;
 	strtok_r(file_name, " ", &save_ptr);
-
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
@@ -208,7 +202,7 @@ error:
 /* 현재 실행 중인 컨텍스트를 f_name으로 전환합니다.
  * 실패 시 -1을 반환합니다. */
 int
-process_exec (void *f_name) { //precess_start
+process_exec (void *f_name) {
 	char *file_name = f_name;
 	bool success;
 
@@ -217,14 +211,6 @@ process_exec (void *f_name) { //precess_start
 	 * it stores the execution information to the member. */
 	/* 스레드 구조체 내의 intr_frame을 사용할 수 없습니다.
 	 * 현재 스레드가 재스케줄링될 때, 실행 정보를 멤버에 저장하기 때문입니다. */
-	
-	/*인터럽트 프레임 선언 : 인터럽트 프레임은 인터럽트와 같은 어떤 요청이 들어오면 기존까지 실행 중이던
-	context(레지스터 포함)를 저장하기 위한 구조체 이다.*/
-	/*근데 why? 인자를 parsing 해서 명령어를 실행하는건데 왜 인터럽트가 나오지?
-	이는 현재 실행 중인 스레드의 context를 f_name에 해당하는 명령을 실행하기위해
-	context switching하는 것이 process_exec()의 역할이기 때문.
-	즉, 우리가 입력해주는 명령을 받기 직전에 어떤 스레드가 돌고 있었을 테니(그게 idle이던 실제로 실행 중이던)
-	process_exec()에 context switching 역할도 같이 넣어 주는것*/
 	struct intr_frame _if;
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
@@ -244,10 +230,11 @@ process_exec (void *f_name) { //precess_start
 	if (!success)
 		return -1;
 
+	//메모리 디버깅용
+	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
+
 	/* Start switched process. */
 	/* 전환된 프로세스를 시작합니다. */
-	hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
-
 	do_iret (&_if);
 	NOT_REACHED ();
 }
@@ -277,7 +264,7 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: 힌트) process_wait (initd)에서 pintos가 종료되는 경우,
 	 * XXX: process_wait을 구현하기 전에 여기에 무한 루프를 추가하는 것을
 	 * XXX: 권장합니다. */
-	while (child_tid);
+	for(int i = 0; i < 50000000; i++);
 
 	return -1;
 }
@@ -294,6 +281,8 @@ process_exit (void) {
 	/* TODO: 여기에 코드를 작성하세요.
 	 * TODO: 프로세스 종료 메시지를 구현합니다 (project2/process_termination.html 참조).
 	 * TODO: 여기에 프로세스 자원 정리를 구현하는 것을 권장합니다. */
+	if(curr->exit_status != 1)
+		printf ("%s: exit(%d)\n", curr->name, curr->exit_status);
 	process_cleanup ();
 }
 
@@ -372,30 +361,31 @@ process_activate (struct thread *next) {
 /* 실행 파일 헤더. [ELF1] 1-4부터 1-8을 참조하세요.
  * 이것은 ELF 바이너리의 맨 처음에 나타납니다. */
 struct ELF64_hdr {
-unsigned char e_ident[EI_NIDENT];  // ELF 식별자
-uint16_t      e_type;             // 파일 유형
-uint16_t      e_machine;          // 대상 아키텍처
-uint32_t      e_version;          // 파일 버전
-uint64_t      e_entry;            // 프로그램 엔트리 포인트 주소
-uint64_t      e_phoff;            // 프로그램 헤더 테이블의 파일 오프셋
-uint64_t      e_shoff;            // 섹션 헤더 테이블의 파일 오프셋
-uint32_t      e_flags;            // 프로세서 별 플래그
-uint16_t      e_ehsize;           // ELF 헤더의 크기
-uint16_t      e_phentsize;        // 프로그램 헤더 엔트리의 크기
-uint16_t      e_phnum;            // 프로그램 헤더 엔트리의 개수
-uint16_t      e_shentsize;        // 섹션 헤더 엔트리의 크기
-uint16_t      e_shnum;            // 섹션 헤더 엔트리의 개수
-uint16_t      e_shstrndx;         // 섹션 이름 문자열 테이블의 섹션 헤더 인덱스
+	unsigned char e_ident[EI_NIDENT];
+	uint16_t e_type;
+	uint16_t e_machine;
+	uint32_t e_version;
+	uint64_t e_entry;
+	uint64_t e_phoff;
+	uint64_t e_shoff;
+	uint32_t e_flags;
+	uint16_t e_ehsize;
+	uint16_t e_phentsize;
+	uint16_t e_phnum;
+	uint16_t e_shentsize;
+	uint16_t e_shnum;
+	uint16_t e_shstrndx;
 };
+
 struct ELF64_PHDR {
-uint32_t      p_type;             // 세그먼트 유형
-uint32_t      p_flags;            // 세그먼트 플래그 (읽기, 쓰기, 실행 권한)
-uint64_t      p_offset;           // 세그먼트 파일 오프셋
-uint64_t      p_vaddr;            // 세그먼트 가상 주소
-uint64_t      p_paddr;            // 세그먼트 물리 주소 (사용되지 않음)
-uint64_t      p_filesz;           // 파일 이미지의 세그먼트 크기
-uint64_t      p_memsz;            // 메모리 이미지의 세그먼트 크기
-uint64_t      p_align;            // 세그먼트 정렬 값
+	uint32_t p_type;
+	uint32_t p_flags;
+	uint64_t p_offset;
+	uint64_t p_vaddr;
+	uint64_t p_paddr;
+	uint64_t p_filesz;
+	uint64_t p_memsz;
+	uint64_t p_align;
 };
 
 /* Abbreviations */
@@ -425,22 +415,6 @@ load (const char *file_name, struct intr_frame *if_) {
 	bool success = false;
 	int i;
 
-	/*Project 2 : Command line parsing*/
-	char *arg_list[128];
-	char *token, *save_ptr;
-	int token_count = 0;
-	printf("%s \n",file_name);
-	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)){
-		arg_list[token_count++] = token;
-	}
-	// while (token != NULL) {
-	// 	// printf("민사빈 : %s\n",token);
-	// 	token = strtok_r (NULL, " ", &save_ptr); // 
-		
-	// 	token_count++;
-	// }
-
-	/*Project 2 : Command line parsing*/
 
 
 	/* Allocate and activate page directory. */
@@ -528,6 +502,7 @@ load (const char *file_name, struct intr_frame *if_) {
 					if (!load_segment (file, file_page, (void *) mem_page,
 								read_bytes, zero_bytes, writable))
 						goto done;
+					thread_current()->executable = file;
 				}
 				else
 					goto done;
@@ -536,7 +511,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	}
 
 	/* Set up stack. */
-	/* 사용자 스택 초기화 */
+	/* 스택 설정 */
 	if (!setup_stack (if_))
 		goto done;
 
@@ -545,11 +520,48 @@ load (const char *file_name, struct intr_frame *if_) {
 	if_->rip = ehdr.e_entry;
 
 	/* TODO: Your code goes here.
-	   TODO: Implement argument passing (see project2/argument_passing.html). */
-	/* TODO: 여기에 코드를 작성하세요. 
-	   TODO: 인자 전달을 구현합니다 (project2/argument_passing.html 참조).
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-	argument_passing_user_stack(argc, argv, if_);
+	 /* TODO: 여기에 코드를 작성하세요. 
+	  * TODO: 인자 전달을 구현합니다 (project2/argument_passing.html 참조). */
+	
+	//1. 인자 <== 방향으로 넣기
+	for(int i = argc - 1; i >= 0; i--)
+	{
+		size_t len = strlen(argv[i]) + 1;
+		if_->rsp -= len;
+		memcpy((void *)if_->rsp, argv[i], len);
+		argv[i] = if_->rsp;
+	}
+	
+	//2. 만약 rsp포인터가 8의 배수가 아니면
+	//남은 간격은 0으로 넣기 자료형은 int8_t == 1byte
+	if(if_->rsp % 8 != 0)
+	{
+		for(int i = 0; i < ALIGN(if_->rsp) - if_->rsp; i++)
+		{
+			if_->rsp--;
+			*(int8_t *)if_->rsp = 0;
+		}
+	}
+
+	//3. NULL넣기
+	if_->rsp -= sizeof(char *);
+	*(char **)if_->rsp = NULL;
+
+	//4. &argv[0], &argv[1], ... char배열 포인터 넣기
+	for(int i = argc - 1; i >= 0; i--)
+	{
+		if_->rsp -= sizeof(char *);
+		*(char **)if_->rsp = argv[i];
+	}
+
+	// 레지스터 설정
+    if_->R.rdi = argc;  // argc
+    if_->R.rsi = if_->rsp; // argv
+
+	//5. fake address 넣기
+	if_->rsp -= sizeof(void *);
+	*(void **)if_->rsp = NULL;
 
 	success = true;
 
@@ -596,7 +608,7 @@ void argument_passing_user_stack(int argc,char *argv[],struct intr_frame *if_){
 
 	/* argv[i] 
 	 * argv[i]의 주소를 유저스택에 push*/
-	for(int i = 0 ;i < argc; i++){
+	for(int i = argc-1; i >= 0; i--){
 		push_rsp += 8; // 주소니까 8바이트
 		memcpy(if_->rsp - push_rsp, &argv[i], 8); //유저스택에 argv[i]의 각 인수들의 시작 주소값을 넣음
 	}
@@ -689,7 +701,6 @@ static bool install_page (void *upage, void *kpage, bool writable);
  *
  * Return true if successful, false if a memory allocation error
  * or disk read error occurs. */
-
 /* FILE의 OFS 오프셋에서 시작하는 세그먼트를 UPAGE 주소에 로드합니다. *
  * 총 READ_BYTES + ZERO_BYTES 바이트의 가상 메모리가 다음과 같이 초기화됩니다: *
  * *

@@ -5,6 +5,18 @@
     "stdint.h": "c",
     "stdio.h": "c",
     "intrinsic.h": "c",
-    "*.inc": "c"
+    "*.inc": "c",
+    "syscall-nr.h": "c",
+    "syscall.h": "c",
+    "main.h": "c",
+    "lib.h": "c",
+    "stddef.h": "c",
+    "file.h": "c",
+    "inode.h": "c",
+    "flags.h": "c",
+    "loader.h": "c",
+    "gdt.h": "c",
+    "disk.h": "c",
+    "filesys.h": "c"
   }
 }
