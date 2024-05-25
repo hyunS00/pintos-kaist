@@ -220,7 +220,7 @@ int read (int fd, void *buffer, unsigned length){
 
 void remove_fd(int fd) {
 	struct thread *t = thread_current();
-	if(fd < 2 || fd >= INT8_MAX)
+	if(fd >= 2 || fd < INT8_MAX)
 		return t->fd_table[fd] = NULL;
 }
 
