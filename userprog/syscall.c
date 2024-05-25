@@ -14,9 +14,7 @@ void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 void check_address (void *addr);
 struct file *get_file_from_fd (int fd);
-int add_file_to_fd_table (struct file *file);
 bool sys_create(const char *file, unsigned initial_size);
-void remove_file_from_fd_table(int fd);
 bool sys_remove (const char *file);
 
 /* System call.
@@ -77,6 +75,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	case SYS_REMOVE:						// 파일 삭제
 		f->R.rax = remove(f->R.rdi);
+		break;
 	case SYS_OPEN:							// 파일 열기
 		f->R.rax = open(f->R.rdi);
 		break;
@@ -84,6 +83,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	// 	filesize(f->R.rdi);
 	case SYS_READ:							// 파일에서 데이터 읽기
 		f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
+		break;
 	case SYS_WRITE:							// 파일에 데이터 쓰기
 		f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
@@ -95,7 +95,6 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		close(f->R.rdi);
 		break;
 	default:
-		printf ("system call!\n");
 		thread_exit ();
 	}
 	// printf ("system call!\n");
@@ -117,38 +116,6 @@ void check_address (void *addr){
 	}
 }
 
-bool sys_create(const char *file, unsigned initial_size)
-{
-	check_address((void *)file);
-	struct inode *inode = NULL;
-	return filesys_create(file, initial_size);
-}
-
-
-int open(const char *file)
-{
-	check_address((void *)file);
-	struct file *f = filesys_open(file);
-
-	if(f == NULL)
-		return -1;
-	return add_file_to_fd_table(f);
-}
-
-//해당 파일을 파일 디스크립터 배열에 추가
-int add_file_to_fd_table (struct file *file)
-{
-	struct thread *t = thread_current();
-    for (int i = 2; i < 10; i++) {
-        if (t->fd_table[i] == NULL) {
-            t->fd_table[i] = file;
-            return i;
-        }
-    }
-    return -1;
-}
-
-
 /* pintos 종료시키는 함수 */
 void halt(void){
 	// printf("halt 실행됐고 pintos 종료\n");
@@ -160,12 +127,21 @@ void halt(void){
 void exit(int status){
 	struct thread *t = thread_current();
 	t->exit_status = status;
-	printf("%s: exit(%d)\n", t->name, t->exit_status);
 	thread_exit();
+}
+
+struct file*
+get_file(int fd){
+	if(fd < 2 || fd >= INT8_MAX)
+		return NULL;
+
+	struct thread *curr = thread_current();
+	return curr->fd_table[fd];
 }
 
 int write(int fd, const void *buffer, unsigned size)
 {
+	check_address(buffer);
 	if(fd == 0) return -1;
 	else if (fd == 1)
 	{
@@ -174,7 +150,7 @@ int write(int fd, const void *buffer, unsigned size)
 	}
 	else
 	{
-		struct file *f = get_file_from_fd(fd);
+		struct file *f = get_file(fd);
 
 		if(f == NULL)
 			return -1;
@@ -184,19 +160,11 @@ int write(int fd, const void *buffer, unsigned size)
 	return -1;
 }
 
-//fd배열에서 file 가져오기
-struct file *get_file_from_fd (int fd)
-{
-	struct thread *t = thread_current();
-	if(fd < 2 || fd >= 1024)
-		return NULL;
-	return t->fd_table[fd];
-}
 
 /*파일을 제거하는 함수, 
 이 때 파일을 제거하더라도 그 이전에 파일을 오픈했다면 
 해당 오픈 파일은 close 되지 않고 그대로 켜진 상태로 남아있는다.*/
-bool sys_remove (const char *file) {
+bool remove (const char *file) {
 	check_address(file);
 	return filesys_remove(file);
 }
@@ -204,9 +172,9 @@ bool sys_remove (const char *file) {
 // // /* 파일 생성하는 시스템 콜 */
 bool create (const char *file, unsigned initial_size) {
 	check_address(file);
+	
 	bool success;
 	/* 성공이면 true, 실패면 false */
-	// check_address(file);
 	if (file == NULL || initial_size <= 0) {
 		return 0;
 	}
@@ -239,19 +207,6 @@ int open (const char *file) {
 
 	return fd;
 }
-// /*파일을 제거하는 함수, 
-// 이 때 파일을 제거하더라도 그 이전에 파일을 오픈했다면 
-// 해당 오픈 파일은 close 되지 않고 그대로 켜진 상태로 남아있는다.*/
-bool remove (const char *file) {
-	check_address(file);
-	return filesys_remove(file);
-}
-
-struct file*
-get_file(int fd){
-	struct thread *curr = thread_current();
-	return curr->fd_table[fd];
-}
 
 int read (int fd, void *buffer, unsigned length){
 	check_address(buffer);
@@ -263,12 +218,18 @@ int read (int fd, void *buffer, unsigned length){
 
 }
 
+void remove_fd(int fd) {
+	struct thread *t = thread_current();
+	if(fd < 2 || fd >= INT8_MAX)
+		return t->fd_table[fd] = NULL;
+}
+
 void close(int fd)
 {
-	struct file *f = get_file_from_fd(fd);
+	struct file *f = get_file(fd);
 	if(f != NULL)
 	{
 		file_close(f);
-		remove_file_from_fd_table(fd);
+		remove_fd(fd);
 	}
 }
