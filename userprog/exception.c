@@ -14,6 +14,8 @@ static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
+static int64_t get_user (const uint8_t *uaddr);
+static bool put_user (uint8_t *udst, uint8_t byte);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -149,7 +151,23 @@ page_fault (struct intr_frame *f) {
 	not_present = (f->error_code & PF_P) == 0;
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
-
+	// printf("not_present:%d write:%d user:%d\n", not_present, write, user);
+	// 사용자 모드에서 발생한 페이지 폴트인 경우
+    if (user) {
+        // 잘못된 사용자 포인터로 인한 폴트 처리
+        if (!is_user_vaddr(fault_addr) || fault_addr == NULL) {
+            exit(-1); // 프로세스 종료
+        }
+    }
+    // 커널 모드에서 발생한 페이지 폴트인 경우
+    else {
+        // get_user() 또는 put_user() 함수 내에서 발생한 폴트인 경우
+        if (f->rip == (uint64_t)get_user || f->rip == (uint64_t)put_user) {
+            f->R.rax = -1; // 오류 코드 설정
+            f->rip = f->rsp; // 함수 리턴 주소 설정
+            return;
+        }
+    }
 #ifdef VM
 	/* For project 3 and later. */
 	if (vm_try_handle_fault (f, fault_addr, user, write, not_present))
@@ -168,3 +186,31 @@ page_fault (struct intr_frame *f) {
 	kill (f);
 }
 
+/* Reads a byte at user virtual address UADDR.
+ * UADDR must be below KERN_BASE.
+ * Returns the byte value if successful, -1 if a segfault
+ * occurred. */
+static int64_t
+get_user (const uint8_t *uaddr) {
+    int64_t result;
+    __asm __volatile (
+    "movabsq $done_get, %0\n"
+    "movzbq %1, %0\n"
+    "done_get:\n"
+    : "=&a" (result) : "m" (*uaddr));
+    return result;
+}
+
+/* Writes BYTE to user address UDST.
+ * UDST must be below KERN_BASE.
+ * Returns true if successful, false if a segfault occurred. */
+static bool
+put_user (uint8_t *udst, uint8_t byte) {
+    int64_t error_code;
+    __asm __volatile (
+    "movabsq $done_put, %0\n"
+    "movb %b2, %1\n"
+    "done_put:\n"
+    : "=&a" (error_code), "=m" (*udst) : "q" (byte));
+    return error_code != -1;
+}

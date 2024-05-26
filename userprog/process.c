@@ -266,7 +266,7 @@ process_wait (tid_t child_tid UNUSED) {
 	 * XXX: 권장합니다. */
 	//1000000000
 	//50000000
-	for(int i = 0; i < 1000000000; i++);
+	for(int i = 0; i < 500000000; i++);
 
 	return -1;
 }

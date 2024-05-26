@@ -124,7 +124,6 @@ check_file_handle (int fd,
   if (file_size != size)
     msg ("size of %s (%zu) differs from expected (%zu)",
           file_name, file_size, size);
-
   /* Read the file block-by-block, comparing data as we go. */
   while (ofs < size)
     {
@@ -134,7 +133,6 @@ check_file_handle (int fd,
       block_size = size - ofs;
       if (block_size > sizeof block)
         block_size = sizeof block;
-
       ret_val = read (fd, block, block_size);
       if (ret_val != block_size)
         fail ("read of %zu bytes at offset %zu in \"%s\" returned %zu",
@@ -156,7 +154,6 @@ void
 check_file (const char *file_name, const void *buf, size_t size) 
 {
   int fd;
-
   CHECK ((fd = open (file_name)) > 1, "open \"%s\" for verification",
          file_name);
   check_file_handle (fd, file_name, buf, size);

@@ -13,9 +13,6 @@
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 void check_address (void *addr);
-struct file *get_file_from_fd (int fd);
-bool sys_create(const char *file, unsigned initial_size);
-bool sys_remove (const char *file);
 
 /* System call.
  *
@@ -79,28 +76,23 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_OPEN:							// 파일 열기
 		f->R.rax = open(f->R.rdi);
 		break;
-	// case SYS_FILESIZE:						// 파일 사이즈 반환
-	// 	filesize(f->R.rdi);
+	case SYS_FILESIZE:						// 파일 사이즈 반환
+		f->R.rax = filesize(f->R.rdi);
+		break;
 	case SYS_READ:							// 파일에서 데이터 읽기
 		f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
 	case SYS_WRITE:							// 파일에 데이터 쓰기
-		f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
+        f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
-	// case SYS_SEEK:							// 파일의 읽기/쓰기 포인터 이동
-	// 	seek(f->R.rdi, f->R.rsi);
-	// case SYS_TELL:							// 파일의 현재 읽기/쓰기 데이터 반환
-	// 	tell(f->R.rdi);
+	case SYS_SEEK:							// 파일의 읽기/쓰기 포인터 이동
+		seek(f->R.rdi, f->R.rsi);
+	case SYS_TELL:							// 파일의 현재 읽기/쓰기 데이터 반환
+		tell(f->R.rdi);
 	case SYS_CLOSE:							// 파일 닫기
 		close(f->R.rdi);
 		break;
-	default:
-		thread_exit ();
 	}
-	// printf ("system call!\n");
-	// struct thread *t = thread_current();
-	// printf("thread name:%s\n",t->name);
-	// thread_exit ();
 }
 
 /*User memory access는 이후 시스템 콜 구현할 때 메모리에 접근할 텐데, 
@@ -210,12 +202,15 @@ int open (const char *file) {
 
 int read (int fd, void *buffer, unsigned length){
 	check_address(buffer);
+
 	if(fd == 0){
-		input_getc();
+		return input_getc();
 	}
+	struct file *f = get_file(fd);
+	if(f == NULL)
+		return 0;
 
-	struct file *file = get_file(fd);
-
+	return file_read(f,buffer,length);
 }
 
 void remove_fd(int fd) {
@@ -232,4 +227,28 @@ void close(int fd)
 		file_close(f);
 		remove_fd(fd);
 	}
+}
+
+int filesize (int fd){
+	struct file *f = get_file(fd);
+	off_t size = file_length(f);
+	return size;
+}
+
+void seek (int fd, unsigned position){
+	struct file *f = get_file(fd);
+
+	if(f == NULL)
+		return;
+
+	file_seek(f, position);
+}
+
+unsigned tell (int fd){
+	struct file *f = get_file(fd);
+
+	if(f == NULL)
+		return;
+
+	return file_tell(f);
 }
