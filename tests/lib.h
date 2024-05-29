@@ -47,4 +47,6 @@ void check_file (const char *file_name, const void *buf, size_t filesize);
 void compare_bytes (const void *read_data, const void *expected_data,
                     size_t size, size_t ofs, const char *file_name);
 
+
+char *convert_format (const char *format, ...);
 #endif /* test/lib.h */

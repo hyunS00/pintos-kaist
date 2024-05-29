@@ -17,6 +17,10 @@
     "loader.h": "c",
     "gdt.h": "c",
     "disk.h": "c",
-    "filesys.h": "c"
+    "filesys.h": "c",
+    "malloc.h": "c",
+    "process.h": "c",
+    "string.h": "c",
+    "palloc.h": "c"
   }
 }

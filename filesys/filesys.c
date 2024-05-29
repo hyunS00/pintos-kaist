@@ -7,6 +7,7 @@
 #include "filesys/inode.h"
 #include "filesys/directory.h"
 #include "devices/disk.h"
+#include "threads/thread.h"
 
 /* The disk that contains the file system. */
 struct disk *filesys_disk;
@@ -123,4 +124,19 @@ do_format (void) {
 #endif
 
 	printf ("done.\n");
+}
+
+struct file*
+get_file(int fd){
+	if(fd < 2 || fd >= INT8_MAX)
+		return NULL;
+
+	struct thread *curr = thread_current();
+	return curr->fd_table[fd];
+}
+
+void remove_fd(int fd) {
+	struct thread *t = thread_current();
+	if(fd >= 2 || fd < INT8_MAX)
+		return t->fd_table[fd] = NULL;
 }

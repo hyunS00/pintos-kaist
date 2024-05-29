@@ -143,6 +143,8 @@ thread_init (void) {
 	lock_init(&sleep_lock);
 	/* 초기화된 쓰레드 우선순위 조정을 위해 all_list에 집어 넣기 */
 	list_push_front(&all_list, &initial_thread->allelem);
+
+	list_init(&initial_thread->children_list);
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -234,12 +236,16 @@ thread_create (const char *name, int priority,
 
 
 	/* 초기화된 쓰레드 우선순위 조정을 위해 all_list에 집어 넣기 */
-	if(name != "idle")
+	if(name != "idle"){
 		list_push_front(&all_list, &t->allelem);
+
+		#ifdef USERPROG
+			list_push_back(&thread_current()->children_list, &t->child_elem);
+		#endif
+	}
 
 	/* Add to run queue. */
 	thread_unblock (t);
-
 	return tid;
 }
 
@@ -308,7 +314,6 @@ thread_name (void) {
 struct thread *
 thread_current (void) {
 	struct thread *t = running_thread ();
-
 	/* Make sure T is really a thread.
 	   If either of these assertions fire, then your thread may
 	   have overflowed its stack.  Each thread has less than 4 kB
@@ -683,7 +688,16 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->wait_on_lock = NULL; // 초기화
 	t->recent_cpu = 0; //최근에 cpu를 얼마나 사용했는지 나타내는 변수 초기화
 	t->nice = 0; // 다른쓰레드들에게 얼마나 양보를 해주는지 나타내는 변수 nice 초기화
-	t->exit_status = 1;
+
+	#ifdef USERPROG
+		t->exit_status = 1;
+		t->is_exit = 0;
+		list_init(&t->children_list);
+		// t->parent = thread_current();
+		sema_init(&t->child_sema, 0);
+		sema_init(&t->exit_sema, 0);
+		sema_init(&t->wait_sema, 0);
+	#endif
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

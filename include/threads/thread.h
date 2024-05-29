@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "threads/interrupt.h"
 #include "threads/fixed_point.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -122,6 +123,14 @@ struct thread {
 	int exit_status;
 	struct file **fd_table;             /* 파일 디스크립터 테이블 */
     struct file *executable;            /* 실행 중인 파일 */
+	struct thread *parent;             	/* 부모 프로세스에 대한 포인터 */
+    struct list children_list;               /* 자식 프로세스 리스트 */
+    struct list_elem child_elem;        /* 자식 프로세스 리스트 요소 */
+    struct semaphore child_sema;        /* 자식 프로세스 동기화를 위한 세마포어 */
+	struct semaphore exit_sema;
+	struct semaphore wait_sema;
+	struct intr_frame *parent_if;		/* 부모 프로세스의 유저스택 인터럽트 프레임 */
+	bool is_exit;  // wait 호출 여부
 };
 
 /* If false (default), use round-robin scheduler.

@@ -196,3 +196,19 @@ compare_bytes (const void *read_data_, const void *expected_data_, size_t size,
   fail ("%zu bytes read starting at offset %zu in \"%s\" differ "
         "from expected", j - i, ofs + i, file_name);
 }
+
+char*
+convert_format (const char *format, ...) 
+{
+  va_list args;
+
+  if (quiet)
+    return;
+  va_start (args, format);
+  static char buf[1024];
+  strlcpy (buf, "\0", sizeof buf);
+  vsnprintf (buf + strlen (buf), sizeof buf - strlen (buf), format, args);
+  strlcpy (buf + strlen (buf), "\0", sizeof buf - strlen (buf));
+  va_end (args);
+  return buf;
+}

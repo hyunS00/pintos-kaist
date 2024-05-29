@@ -1,5 +1,6 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
+#include <string.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
@@ -9,10 +10,16 @@
 #include "intrinsic.h"
 #include "lib/user/syscall.h"
 #include "filesys/filesys.h"
+#include "threads/palloc.h"
+#include "userprog/process.h"
+
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 void check_address (void *addr);
+struct thread *get_child_process(int pid);
+void remove_child_process(struct thread *child);
+
 
 /* System call.
  *
@@ -38,6 +45,8 @@ syscall_init (void) {
 	 * mode stack. Therefore, we masked the FLAG_FL. */
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+
+	lock_init(&filesys_lock);
 }
 
 /* The main system call interface */
@@ -60,13 +69,17 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_EXIT:							// 프로그램 종료 후 상태 반환
 		exit(f->R.rdi);
 		break;
-	// 	break;
-	// // case SYS_FORK:							// 자식 프로세스 생성
-	// 	fork(f->R.rdi);
-	// case SYS_EXEC:							// 새 프로그램 실행
-	// 	exec(f->R.rdi);
-	// case SYS_WAIT:							// 자식 프로세스가 종료될 때까지 기다림
-	// 	wait(f->R.rdi);		
+	case SYS_FORK:							// 자식 프로세스 생성
+		thread_current()->parent_if = palloc_get_page(0);
+		memcpy (thread_current()->parent_if, f, sizeof (struct intr_frame));
+		f->R.rax = fork(f->R.rdi);
+		break;
+	case SYS_EXEC:							// 새 프로그램 실행
+		f->R.rax = exec(f->R.rdi);
+		break;
+	case SYS_WAIT:							// 자식 프로세스가 종료될 때까지 기다림
+		f->R.rax = wait(f->R.rdi);
+		break;
 	case SYS_CREATE:
         f->R.rax = create(f->R.rdi, f->R.rsi);
 		break;
@@ -87,11 +100,15 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	case SYS_SEEK:							// 파일의 읽기/쓰기 포인터 이동
 		seek(f->R.rdi, f->R.rsi);
+		break;
 	case SYS_TELL:							// 파일의 현재 읽기/쓰기 데이터 반환
-		tell(f->R.rdi);
+		f->R.rax = tell(f->R.rdi);
+		break;
 	case SYS_CLOSE:							// 파일 닫기
 		close(f->R.rdi);
 		break;
+	default:
+		exit(-1);
 	}
 }
 
@@ -117,18 +134,8 @@ void halt(void){
 
 /* 현재 프로세스를 종료시키는 시스템 콜 */
 void exit(int status){
-	struct thread *t = thread_current();
-	t->exit_status = status;
+	thread_current()->exit_status = status;
 	thread_exit();
-}
-
-struct file*
-get_file(int fd){
-	if(fd < 2 || fd >= INT8_MAX)
-		return NULL;
-
-	struct thread *curr = thread_current();
-	return curr->fd_table[fd];
 }
 
 int write(int fd, const void *buffer, unsigned size)
@@ -161,7 +168,7 @@ bool remove (const char *file) {
 	return filesys_remove(file);
 }
 
-// // /* 파일 생성하는 시스템 콜 */
+/* 파일 생성하는 시스템 콜 */
 bool create (const char *file, unsigned initial_size) {
 	check_address(file);
 	
@@ -179,7 +186,6 @@ bool create (const char *file, unsigned initial_size) {
 int open (const char *file) {
 	struct thread *curr = thread_current();
 	check_address(file);
-
 	struct file *open_file = filesys_open(file);
 	int fd = -1;
 
@@ -187,6 +193,7 @@ int open (const char *file) {
 		return -1;
 	}
 
+	lock_acquire(&filesys_lock);
 	for(int i = 2; i < INT8_MAX; i++){
 		if(curr->fd_table[i] == NULL){
 			fd = i;
@@ -196,11 +203,13 @@ int open (const char *file) {
 
 	if(fd != -1)
 		curr->fd_table[fd] = open_file;
+	lock_release(&filesys_lock);
 
 	return fd;
 }
 
 int read (int fd, void *buffer, unsigned length){
+	int size;
 	check_address(buffer);
 
 	if(fd == 0){
@@ -209,24 +218,22 @@ int read (int fd, void *buffer, unsigned length){
 	struct file *f = get_file(fd);
 	if(f == NULL)
 		return 0;
-
-	return file_read(f,buffer,length);
-}
-
-void remove_fd(int fd) {
-	struct thread *t = thread_current();
-	if(fd >= 2 || fd < INT8_MAX)
-		return t->fd_table[fd] = NULL;
+	lock_acquire(&filesys_lock);
+	size = file_read(f,buffer,length);
+	lock_release(&filesys_lock);
+	return size;
 }
 
 void close(int fd)
 {
 	struct file *f = get_file(fd);
+	lock_acquire(&filesys_lock);
 	if(f != NULL)
 	{
 		file_close(f);
 		remove_fd(fd);
 	}
+	lock_release(&filesys_lock);
 }
 
 int filesize (int fd){
@@ -251,4 +258,30 @@ unsigned tell (int fd){
 		return;
 
 	return file_tell(f);
+}
+
+pid_t fork (const char *thread_name){
+	return process_fork(thread_name, NULL);
+}
+
+int wait (pid_t pid) {
+	// printf("--%s wait on->%d\n",thread_name(),pid);
+	return process_wait(pid);
+}
+
+int exec (const char *file) {
+	check_address(file);
+
+	char *fn_copy = palloc_get_page(PAL_ZERO|PAL_USER);
+	if ((fn_copy) == NULL) {
+		exit(-1);
+	}
+	strlcpy(fn_copy, file, PGSIZE);
+
+	if (process_exec(fn_copy) == -1) {
+		return -1;
+	}
+
+	NOT_REACHED();
+	return 0;
 }
