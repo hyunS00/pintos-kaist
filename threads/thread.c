@@ -231,12 +231,33 @@ thread_create (const char *name, int priority,
 	t->tf.ss = SEL_KDSEG;
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
+    t->fd = 2;
+//     t->fd_table[0] = 0;
+//     t->fd_table[1] = 1;
+
+// /* Alloc & Init File Descriptor Table. */
+//     t->fd_table = palloc_get_page(PAL_ZERO);
+    
+//     if (t->fd_table == NULL) {
+//         palloc_free_page(t);
+//         return TID_ERROR;
+//         // exit(-1);
+//     }
+//     for (int i = 2; i < 127; i++) {
+//         t->fd_table[i] = NULL;
+//     }
+
 
 
 	/* 초기화된 쓰레드 우선순위 조정을 위해 all_list에 집어 넣기 */
-	if(name != "idle")
+	if(name != "idle"){
 		list_push_front(&all_list, &t->allelem);
-
+	}
+	if(aux != NULL)
+	{
+		list_push_back(&thread_current()->child_list, &t->child_elem);
+		t->fd_table = palloc_get_multiple(PAL_USER | PAL_ZERO, INT8_MAX);
+	}
 	/* Add to run queue. */
 	thread_unblock (t);
 
@@ -684,6 +705,10 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->recent_cpu = 0; //최근에 cpu를 얼마나 사용했는지 나타내는 변수 초기화
 	t->nice = 0; // 다른쓰레드들에게 얼마나 양보를 해주는지 나타내는 변수 nice 초기화
 	t->exit_status = 1;
+	list_init(&t->child_list);
+	sema_init(&t->fork_sema, 0);
+	sema_init(&t->wait_sema, 0);
+	sema_init(&t->free_sema, 0);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

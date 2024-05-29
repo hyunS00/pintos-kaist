@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "threads/interrupt.h"
 #include "threads/fixed_point.h"
+#include "synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -28,7 +29,7 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
-
+#define MAX_FD_NUM 128
 #define USERPROG // 유저프로그램 모드 활성화
 /* A kernel thread or user process.
  *
@@ -122,6 +123,15 @@ struct thread {
 	int exit_status;
 	struct file **fd_table;             /* 파일 디스크립터 테이블 */
     struct file *executable;            /* 실행 중인 파일 */
+
+	struct list child_list; 		// _fork(), _wait() 구현 때 사용
+	struct list_elem child_elem; 	// _fork(), _wait() 구현 때 사용
+	// struct intr_frame parent_if;	// _fork() 구현 때 사용, _do_fork() 함수
+	struct intr_frame pre_if;
+	int fd;
+	struct semaphore fork_sema;
+	struct semaphore wait_sema;
+	struct semaphore free_sema;
 };
 
 /* If false (default), use round-robin scheduler.
