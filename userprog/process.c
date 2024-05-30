@@ -122,10 +122,9 @@ tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	struct thread *parent = thread_current();
 	/* Clone current thread to new thread.*/
-	// printf("||%s fork at %s\n",thread_name(),name);
 	tid_t pid = thread_create (name,
 			PRI_DEFAULT, __do_fork, thread_current ());
-	// printf("\\\\pid:%d\n",pid);
+
 	if(pid == TID_ERROR)
 		return TID_ERROR;
 
@@ -133,19 +132,12 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	old_level = intr_disable();
 	struct thread *child = get_child_process(pid);
 	intr_set_level(old_level);
-	// printf("alsdkjaf;ilhadfsl %s\n",child->name);
-	// printf(" %s가 %s를 포크\n",thread_name(),name);
-	// printf("%s에서 wait fork: %d->status%d\n",thread_name(),child->tid, child->exit_status);
-	// printf("  process_fork: %d-> sema down %d\n",thread_current()->tid,child->tid);
-	// printf("child:%s tid:%d\n",child->name, child->tid);
-	if( child == NULL){
-		// printf("널? \n");
+
+	if( child == NULL)
 		return TID_ERROR;
-	}
-	// printf("fork: %s\n", child->name);
+
 	sema_down(&child->child_sema);
-	// printf("  process_fork: rinning current %d\n",thread_current()->tid);
-	// printf("%s에서 wait fork 탈출  %d->status\n",thread_name(),child->tid, child->exit_status);
+
 	return pid;
 }
 
@@ -215,9 +207,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
  * 즉, process_fork의 두 번째 인자를 이 함수에 전달해야 합니다. */
 static void
 __do_fork (void *aux) {
-	enum intr_level old_level;
 	struct intr_frame if_;
-	// old_level = intr_disable();
 	struct thread *parent = (struct thread *) aux;
 	struct thread *current = thread_current ();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
@@ -226,7 +216,6 @@ __do_fork (void *aux) {
 	parent_if = parent->parent_if; // parent->tf를 유저영역에 사용할 인터럽트 프레임
 	current->parent = parent;
 
-	// list_push_back(&parent->children_list, &current->child_elem);
 	bool succ = true;
 	/* 1. Read the cpu context to local stack. */
 	/* 1. CPU 컨텍스트를 로컬 스택으로 읽어옵니다. */
@@ -247,38 +236,29 @@ __do_fork (void *aux) {
 	if (!pml4_for_each (parent->pml4, duplicate_pte, parent))
 		goto error;
 #endif
-
-	/* TODO: Your code goes here.
-	 * TODO: Hint) To duplicate the file object, use `file_duplicate`
-	 * TODO:       in include/filesys/file.h. Note that parent should not return
-	 * TODO:       from the fork() until this function successfully duplicates
-	 * TODO:       the resources of parent.*/
-	
 	/* TODO: 여기에 코드를 작성하세요.
 	 * TODO: 힌트) 파일 객체를 복제하려면 include/filesys/file.h에 있는
 	 * TODO: `file_duplicate`를 사용하세요. 이 함수가 부모의 자원을 성공적으로
 	 * TODO: 복제할 때까지 부모는 fork()에서 반환하면 안 됩니다.*/
 	process_init ();
 
-	struct file *f;
+	struct file *parent_file;
 	for(int fd = 2; fd < INT8_MAX; fd++){
-		f = get_file(parent->fd_table[fd]);
-		if(f != NULL){
-			current->fd_table[fd] = file_duplicate(f);
-		}
+		parent_file = get_file(fd, parent);
+		if(parent_file != NULL)
+			current->fd_table[fd] = file_duplicate(parent_file);
 	}
+
+	if(parent->executable != NULL)
+		current->executable = file_duplicate(parent->executable);
+	if_.R.rax = 0;
 	/* Finally, switch to the newly created process. */
 	/* 마지막으로, 새로 생성된 프로세스로 전환합니다. */
-	// intr_set_level(old_level);
-	if_.R.rax = 0;
-	// printf("%d에서 fork sema_up status:%d\n",current->tid,current->exit_status);
-	// printf("  _do_fork: sema up %d\n",current->tid);
 	sema_up(&current->child_sema);
 	if (succ){
 		do_iret (&if_);
 	}
 error:
-	// printf("error %s sema_up\n",current->name);
 	sema_up(&current->child_sema);
 	exit (TID_ERROR);
 }
@@ -342,42 +322,17 @@ process_exec (void *f_name) {
  * 이 함수는 문제 2-2에서 구현될 것입니다. 현재는 아무것도 하지 않습니다. */
 int
 process_wait (tid_t child_tid UNUSED) {
-	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
-	 * XXX:       to add infinite loop here before
-	 * XXX:       implementing the process_wait. */
-	/* XXX: 힌트) process_wait (initd)에서 pintos가 종료되는 경우,
-	 * XXX: process_wait을 구현하기 전에 여기에 무한 루프를 추가하는 것을
-	 * XXX: 권장합니다. */
-	//1000000000
-	//50000000
-	// for(int i = 0; i < 100000000; i++);
-	// printf("name:%s %d child%d\n",thread_current()->name,thread_current()->tid,child_tid);
 	struct thread *child = get_child_process(child_tid);
 	int exit_status;
 	if(child == NULL){
-		// printf("차일드 없음 %s\n",thread_name());
 		return TID_ERROR;
 	}
+	sema_down(&child->wait_sema);
 
-	// if (child->is_exit) {
-    // 	return -1;  // 이미 wait 호출된 경우
-  	// }
-
-	// printf("%s에서 wait child: %d->status: %d\n",thread_current()->name,child->tid,child->exit_status);
-	// printf("  process_wait: %d->sema down %d\n",thread_current()->tid,child->tid);
-	// printf("sema down%d\n",thread_current()->tid);
-	// printf("  %s on wait-> %s\n",thread_name(),child->name);
-	sema_down(&child->child_sema);
 	exit_status = child->exit_status;
-	// printf("  process_wait: runing current %d\n",thread_current()->tid);
 	list_remove(&child->child_elem);
+
 	sema_up(&child->exit_sema);
-	// printf("exit sema up %d\n",child->tid);
-	// printf("%s에서 wait 탈출 child %d->status: %d\n",thread_current()->name,child->tid,child->exit_status);
-	// if( exit_status < 0){
-	// 	// printf("비정상 종료 name:%s child%d\n",thread_current()->name,child->exit_status);
-	// 	return -1;
-	// }
 	return exit_status;
 }
 
@@ -393,19 +348,34 @@ process_exit (void) {
 	/* TODO: 여기에 코드를 작성하세요.
 	 * TODO: 프로세스 종료 메시지를 구현합니다 (project2/process_termination.html 참조).
 	 * TODO: 여기에 프로세스 자원 정리를 구현하는 것을 권장합니다. */
-	// printf("%s\n",curr->name);
-	if(curr->exit_status != 1)
+	if(curr->is_exit)
 		printf("%s: exit(%d)\n", curr->name, curr->exit_status);
-	// printf("%s: exit(%d)\n", curr->name, curr->exit_status);
-	// printf("  process_exit: sema up cuurent %d\n",curr->tid);
-	curr->is_exit = true;
   	/* 부모 프로세스에게 종료 상태 알림 */
-  	// if (curr->parent != NULL) {
-	// 	// printf("sema up %d\n",curr->parent->tid);
-  	// }
+
+	if(!list_empty(&curr->children_list)){
+		for(struct list_elem *e = list_begin(&curr->children_list); e != list_end(&curr->children_list); e = list_next(e)){
+			struct thread *t = list_entry(e, struct thread, child_elem);
+			if(!t->is_exit)
+				process_wait(t->tid);
+		}
+	}
+
+	if(curr->executable != NULL){
+		file_close(curr->executable);
+		curr->executable = NULL;
+	}
+
+	if(curr->fd_table != NULL){
+		for(int fd = 2; fd < INT8_MAX; fd++){
+			if(curr->fd_table[fd] != NULL){
+				file_close(curr->fd_table[fd]);
+				curr->fd_table[fd] = NULL;
+			}
+		}
+	}
+	curr->is_exit = true;
 	sema_up(&curr->wait_sema);  // 부모 프로세스를 깨움
 	sema_up(&curr->child_sema);
-	// printf("exit sema down %d\n",curr->tid);
 	sema_down(&curr->exit_sema);
 
 	process_cleanup ();
@@ -627,7 +597,6 @@ load (const char *file_name, struct intr_frame *if_) {
 					if (!load_segment (file, file_page, (void *) mem_page,
 								read_bytes, zero_bytes, writable))
 						goto done;
-					thread_current()->executable = file;
 				}
 				else
 					goto done;
@@ -640,6 +609,10 @@ load (const char *file_name, struct intr_frame *if_) {
 	if (!setup_stack (if_))
 		goto done;
 
+	sema_up(&thread_current()->child_sema);
+
+	thread_current()->executable = file;
+	file_deny_write(thread_current()->executable);
 	/* Start address. */
 	/* 시작 주소 */
 	if_->rip = ehdr.e_entry;
@@ -651,9 +624,11 @@ load (const char *file_name, struct intr_frame *if_) {
 	argument_passing_user_stack(argc, argv, if_);
 
 	success = true;
+	return success;
 done:
 	/* We arrive here whether the load is successful or not. */
 	/* 로드가 성공했든 실패했든 여기에 도착합니다. */
+	sema_up(&thread_current()->child_sema);
 	file_close (file);
 	return success;
 }

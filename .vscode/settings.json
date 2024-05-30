@@ -21,6 +21,7 @@
     "malloc.h": "c",
     "process.h": "c",
     "string.h": "c",
-    "palloc.h": "c"
+    "palloc.h": "c",
+    "directory.h": "c"
   }
 }

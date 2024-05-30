@@ -204,11 +204,12 @@ convert_format (const char *format, ...)
 
   if (quiet)
     return;
-  va_start (args, format);
+  va_start (args, format); //포맷에 맞게 인자 parsing
   static char buf[1024];
-  strlcpy (buf, "\0", sizeof buf);
-  vsnprintf (buf + strlen (buf), sizeof buf - strlen (buf), format, args);
-  strlcpy (buf + strlen (buf), "\0", sizeof buf - strlen (buf));
-  va_end (args);
+  strlcpy (buf, "\0", sizeof buf); // 버퍼 초기화
+  vsnprintf (buf + strlen (buf), sizeof buf - strlen (buf), format, args); // 포맷에 맞게 인자 넣기
+  strlcpy (buf + strlen (buf), "\0", sizeof buf - strlen (buf)); // 끝 문자 설정
+  va_end (args); // 파싱 끝?
+  
   return buf;
 }

@@ -127,12 +127,11 @@ do_format (void) {
 }
 
 struct file*
-get_file(int fd){
+get_file(int fd, struct thread *t){
 	if(fd < 2 || fd >= INT8_MAX)
 		return NULL;
 
-	struct thread *curr = thread_current();
-	return curr->fd_table[fd];
+	return t->fd_table[fd];
 }
 
 void remove_fd(int fd) {

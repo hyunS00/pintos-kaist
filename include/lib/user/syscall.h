@@ -21,8 +21,6 @@ typedef int off_t;
 #define EXIT_SUCCESS 0          /* Successful execution. */
 #define EXIT_FAILURE 1          /* Unsuccessful execution. */
 
-static struct lock filesys_lock;
-
 /* Projects 2 and later. */
 void halt (void) NO_RETURN;
 void exit (int status) NO_RETURN;

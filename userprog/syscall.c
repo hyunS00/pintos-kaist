@@ -8,7 +8,6 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
-#include "lib/user/syscall.h"
 #include "filesys/filesys.h"
 #include "threads/palloc.h"
 #include "userprog/process.h"
@@ -134,29 +133,34 @@ void halt(void){
 
 /* 현재 프로세스를 종료시키는 시스템 콜 */
 void exit(int status){
-	thread_current()->exit_status = status;
+	struct thread *curr = thread_current();
+	curr->exit_status = status;
+	curr->is_exit = true;
 	thread_exit();
 }
 
 int write(int fd, const void *buffer, unsigned size)
 {
+	int byte_written = size;
 	check_address(buffer);
 	if(fd == 0) return -1;
-	else if (fd == 1)
+	lock_acquire(&filesys_lock);
+	if (fd == 1)
 	{
 		putbuf(buffer, size);
-		return size;
 	}
 	else
 	{
-		struct file *f = get_file(fd);
+		struct file *f = get_file(fd, thread_current());
 
-		if(f == NULL)
+		if(f == NULL){
+			lock_release(&filesys_lock);
 			return -1;
-		int byte_written = file_write(f, buffer, size);
-		return byte_written;
+		}
+		byte_written = file_write(f, buffer, size);
 	}
-	return -1;
+	lock_release(&filesys_lock);
+	return byte_written;
 }
 
 
@@ -192,7 +196,6 @@ int open (const char *file) {
 	if(open_file == NULL){
 		return -1;
 	}
-
 	lock_acquire(&filesys_lock);
 	for(int i = 2; i < INT8_MAX; i++){
 		if(curr->fd_table[i] == NULL){
@@ -215,9 +218,10 @@ int read (int fd, void *buffer, unsigned length){
 	if(fd == 0){
 		return input_getc();
 	}
-	struct file *f = get_file(fd);
+	struct file *f = get_file(fd, thread_current());
 	if(f == NULL)
 		return 0;
+
 	lock_acquire(&filesys_lock);
 	size = file_read(f,buffer,length);
 	lock_release(&filesys_lock);
@@ -226,7 +230,7 @@ int read (int fd, void *buffer, unsigned length){
 
 void close(int fd)
 {
-	struct file *f = get_file(fd);
+	struct file *f = get_file(fd, thread_current());
 	lock_acquire(&filesys_lock);
 	if(f != NULL)
 	{
@@ -237,13 +241,13 @@ void close(int fd)
 }
 
 int filesize (int fd){
-	struct file *f = get_file(fd);
+	struct file *f = get_file(fd, thread_current());
 	off_t size = file_length(f);
 	return size;
 }
 
 void seek (int fd, unsigned position){
-	struct file *f = get_file(fd);
+	struct file *f = get_file(fd, thread_current());
 
 	if(f == NULL)
 		return;
@@ -252,7 +256,7 @@ void seek (int fd, unsigned position){
 }
 
 unsigned tell (int fd){
-	struct file *f = get_file(fd);
+	struct file *f = get_file(fd, thread_current());
 
 	if(f == NULL)
 		return;
@@ -277,9 +281,9 @@ int exec (const char *file) {
 		exit(-1);
 	}
 	strlcpy(fn_copy, file, PGSIZE);
-
+	sema_down(&thread_current()->child_sema);
 	if (process_exec(fn_copy) == -1) {
-		return -1;
+		exit(-1);
 	}
 
 	NOT_REACHED();

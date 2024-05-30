@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include "filesys/off_t.h"
+#include "threads/thread.h"
 
 /* Sectors of system file inodes. */
 #define FREE_MAP_SECTOR 0       /* Free map file inode sector. */
@@ -17,6 +18,6 @@ bool filesys_create (const char *name, off_t initial_size);
 struct file *filesys_open (const char *name);
 bool filesys_remove (const char *name);
 
-struct file *get_file(int fd);
+struct file *get_file(int fd, struct thread *t);
 void remove_fd(int fd);
 #endif /* filesys/filesys.h */
